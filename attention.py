@@ -10,9 +10,8 @@ from torch.autograd import Variable
 from torch import optim
 
 use_cuda = torch.cuda.is_available()
-HIDDEN_DIM = 32 
-MAX_LENGTH = 140
-labels = {'none': 0, 'racism': 1, 'sexism': 2}
+HIDDEN_DIM = 64 
+labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
 
 # Class for converting from words to ids and vice-versa
 class Vocab:
@@ -74,25 +73,25 @@ class BidirectionalEncoder(nn.Module):
 
         return result
 
-class AttentionDecoder(nn.Module):
-    def __init__(self, num_labels, hidden_size, max_length):
-        super(AttentionDecoder, self).__init__()
-        self.num_labels = num_labels
+class AttentionClassifier(nn.Module):
+    def __init__(self, num_labels_to_id, hidden_size):
+        super(AttentionClassifier, self).__init__()
+        self.num_labels_to_id = num_labels_to_id
         self.hidden_size = hidden_size
-        self.max_length = max_length
 
-        self.attn = nn.Linear(self.hidden_size*2, self.max_length)
         self.layer1 = nn.Linear(self.hidden_size*2, self.hidden_size)
         self.layer2 = nn.Linear(self.hidden_size, self.hidden_size)
-        self.out = nn.Linear(self.hidden_size, self.num_labels)
+        self.out = nn.Linear(self.hidden_size, self.num_labels_to_id)
 
     def forward(self, encoder_outputs, encoder_hidden):
-        attn_weights = F.softmax(self.attn(encoder_hidden[0].view(-1, self.hidden_size * 2)), dim=1)
-        attn_applied = torch.bmm(attn_weights.unsqueeze(0),
+        interaction = torch.bmm(encoder_outputs.unsqueeze(0),
+            encoder_hidden[0].view(self.hidden_size * 2, -1).unsqueeze(0))
+        attn_weights = F.softmax(interaction, dim=1).view(1, 1, -1)
+        attn_applied = torch.bmm(attn_weights,
             encoder_outputs.unsqueeze(0))
         output = F.relu(self.layer1(attn_applied))
-        output = F.tanh(self.layer2(output))
-        output = F.softmax(self.out(output[0]), dim=1)
+        output = F.relu(self.layer2(output))
+        output = self.out(output[0])
 
         return output, attn_weights
 
@@ -116,14 +115,14 @@ def read_corpus_file(corpus_filename):
     return corpus
 
 # Read file containing text and label pairs and converts them into Variables
-def process_instances(instances_filename, vocab, labels):
+def process_instances(instances_filename, vocab, labels_to_id):
     instances = []
     reader = csv.DictReader(open(instances_filename, 'r'))
     for row in reader:
         text = process_raw_text(row['text'])
         text_ids = [vocab.get_word_id(word) for word in text]
         text_variable = Variable(torch.LongTensor(text_ids).view(-1, 1))
-        label = Variable(torch.LongTensor([labels[row['label']]]))
+        label = Variable(torch.LongTensor([labels_to_id[row['label']]]))
         if use_cuda:
             text_variable = text_variable.cuda()
             label = label.cuda()
@@ -133,17 +132,17 @@ def process_instances(instances_filename, vocab, labels):
     return instances
 
 # Update the model for the given instance
-def update_model(instance, encoder, encoder_optimizer, decoder, decoder_optimizer,
-    criterion, max_length):
+def update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
+    criterion):
     encoder_hidden = encoder.init_hidden()
 
     encoder_optimizer.zero_grad()
-    decoder_optimizer.zero_grad()
+    classifier_optimizer.zero_grad()
 
     instance_input, instance_label = instance
     input_length = instance_input.size()[0]
 
-    encoder_outputs = Variable(torch.zeros(max_length, encoder.hidden_size*2))
+    encoder_outputs = Variable(torch.zeros(input_length, encoder.hidden_size*2))
     encoder_outputs = encoder_outputs.cuda() if use_cuda else encoder_outputs
 
     for ei in range(input_length):
@@ -151,49 +150,63 @@ def update_model(instance, encoder, encoder_optimizer, decoder, decoder_optimize
             instance_input[ei], encoder_hidden)
         encoder_outputs[ei] = encoder_output[0][0]
 
-    decoder_output, decoder_attention = decoder(encoder_outputs, encoder_hidden)
-    loss = criterion(decoder_output, instance_label)
+    classifier_output, classifier_attention = classifier(encoder_outputs, encoder_hidden)
+    loss = criterion(classifier_output, instance_label)
     loss.backward()
 
     encoder_optimizer.step()
-    decoder_optimizer.step()
+    classifier_optimizer.step()
 
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, encoder, decoder, vocab, labels, max_length, n_epochs=10,
-    print_every=500, learning_rate=0.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, n_epochs=30,
+    print_every=500, learning_rate=.1):
     
-    print_loss_total = 0
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
+    classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
+
+    dev_inputs = [x[0] for x in dev_instances]
+    dev_labels = [x[1] for x in dev_instances]
+
+    print_loss_total = 0
+
+    best_dev_accuracy = 0
+
     for i in range(n_epochs):
         print_epoch_loss_total = 0
         print 'Training epoch ' + str(i)
         random.shuffle(training_instances)
         for j, instance in enumerate(training_instances):
-            loss = update_model(instance, encoder, encoder_optimizer, decoder, decoder_optimizer,
-                criterion, max_length)
+            loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
+                criterion)
             print_loss_total += loss
             print_epoch_loss_total += loss
 
-            if j % print_every == 0:
+            if j + 1 % print_every == 0:
                 print_loss_avg = print_loss_total/print_every
                 print_loss_total = 0
                 print('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
-        decode(training_instances, encoder, decoder, vocab, labels, max_length)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
+        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
+        accuracy = evaluate_accuracy(dev_labels, predicted_dev_labels)
+        print('Epoch %d dev accuracy: %.4f' % (i, accuracy))
+        print('----------------------------------')
+        if accuracy > best_dev_accuracy:
+            best_dev_accuracy = accuracy
 
-# Evaluates the model on the given instance_inputs
-def decode(instances, encoder, decoder, vocab, labels, max_length):
-    for instance_input, _ in instances:
+
+# Runs the model as a classifier on the given instance_inputs
+def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
+    predicted_labels = []
+    for instance_input in instance_inputs:
         encoder_hidden = encoder.init_hidden()
         input_length = instance_input.size()[0]
 
-        encoder_outputs = Variable(torch.zeros(max_length, encoder.hidden_size*2))
+        encoder_outputs = Variable(torch.zeros(input_length, encoder.hidden_size*2))
         encoder_outputs = encoder_outputs.cuda() if use_cuda else encoder_outputs
 
         for ei in range(input_length):
@@ -201,30 +214,43 @@ def decode(instances, encoder, decoder, vocab, labels, max_length):
                 instance_input[ei], encoder_hidden)
             encoder_outputs[ei] = encoder_output[0][0]
 
-        decoder_output, decoder_attention = decoder(encoder_outputs, encoder_hidden)
-        top_value, top_label = decoder_output.data.topk(1)
+        classifier_output, classifier_attention = classifier(encoder_outputs, encoder_hidden)
+        top_value, top_label = classifier_output.data.topk(1)
+        predicted_labels.append(Variable(top_label.squeeze(0)))
+
+    return predicted_labels
+
+def evaluate_accuracy(true_labels, predicted_labels):
+    correct = 0
+    total = 0
+    for tl, pl in zip(true_labels, predicted_labels):
+        total += 1
+        if tl.data[0] == pl.data[0]:
+            correct += 1
+
+    return float(correct)/total * 100
 
 def main():
     training_filename = 'zeerak_naacl/test.csv'
-    dev_filename = 'zeerak_naacl/zeerak_naacl_tweets.csv'
+    dev_filename = 'zeerak_naacl/test.csv'
     test_filename = 'zeerak_naacl/zeerak_naacl_tweets.csv' 
 
     training_corpus = read_corpus_file(training_filename)
     vocab = Vocab()
     vocab.build_vocab(training_corpus)
 
-    training_instances = process_instances(training_filename, vocab, labels)
+    training_instances = process_instances(training_filename, vocab, labels_to_id)
+    dev_instances = process_instances(dev_filename, vocab, labels_to_id)
     """
-    dev_instances = process_instances(dev_filename, vocab, labels)
-    test_instances = process_instances(test_filename, vocab, labels)
+    test_instances = process_instances(test_filename, vocab, labels_to_id)
     """
 
     encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
-    decoder = AttentionDecoder(len(labels), HIDDEN_DIM, MAX_LENGTH)
+    classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
     if use_cuda:
         encoder = encoder.cuda()
-        decoder = decoder.cuda()
+        classifier = classifier.cuda()
 
-    train_epochs(training_instances, encoder, decoder, vocab, labels, MAX_LENGTH)
+    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id)
 
 if __name__ == '__main__': main()
