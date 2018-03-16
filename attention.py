@@ -16,11 +16,8 @@ import pdb
 
 use_cuda = torch.cuda.is_available()
 HIDDEN_DIM = 64 
-
-# For Zeerak data
-labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
-# For Davidson data
-labels_to_id = {'neither': 0, 'hate_speech': 1, 'offensive_language': 2}
+#labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
+labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
 
 # Class for converting from words to ids and vice-versa
 class Vocab:
@@ -182,7 +179,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
     print_loss_total = 0
 
-    best_dev_accuracy = 0
+    best_dev_score = 0
 
     starting_ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S") # starting timestamp
 
@@ -196,7 +193,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             print_loss_total += loss
             print_epoch_loss_total += loss
 
-            if j + 1 % print_every == 0:
+            if j !=0 and j % print_every == 0:
                 print_loss_avg = print_loss_total/print_every
                 print_loss_total = 0
                 print('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
@@ -204,11 +201,13 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
         predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
-        accuracy = evaluate_accuracy(dev_labels, predicted_dev_labels)
-        print('Epoch %d dev accuracy: %.4f' % (i, accuracy))
+        #score = evaluate_accuracy(dev_labels, predicted_dev_labels)
+        score = evaluate_f1(dev_labels, predicted_dev_labels)
+        #print('Epoch %d dev accuracy: %.4f' % (i, score))
+        print('Epoch %d dev f1: %.4f' % (i, score))
         print('----------------------------------')
-        if accuracy > best_dev_accuracy:
-            best_dev_accuracy = accuracy
+        if score > best_dev_score:
+            best_dev_score = score
 
             # Save encoder
             torch.save(encoder, out_filepath + 'encoder_{}.model'.format(starting_ts))
@@ -247,6 +246,37 @@ def evaluate_accuracy(true_labels, predicted_labels):
 
     return float(correct)/total * 100
 
+def evaluate_f1(true_labels, predicted_labels):
+    """ Evaluate f1 on  predicting hate speech """
+
+    total = 0
+    pred_hs = 0
+    actual_hs = 0
+    correct_hs = 0
+
+    for tl, pl in zip(true_labels, predicted_labels):
+        total += 1
+        if tl.data[0] == 1: # is actually hate speech
+            actual_hs += 1
+        if pl.data[0] == 1: # is predicted hate speech
+            pred_hs += 1
+        if tl.data[0] == pl.data[0] == 1:
+            correct_hs += 1
+
+    if pred_hs == 0:
+        prec = 0.0
+    else:
+        prec = float(correct_hs)/pred_hs
+
+    rec = float(correct_hs)/actual_hs
+
+    if prec == rec == 0:
+       f1 = 0.0 
+    else:
+       f1 = 2 * prec * rec / (prec + rec) * 100  
+
+    return f1
+
 def load_model(model_path, model_ts):
     clf_path = "{}classifier_{}.model".format(model_path, model_ts)
     encoder_path = "{}encoder_{}.model".format(model_path, model_ts)
@@ -257,13 +287,10 @@ def load_model(model_path, model_ts):
     return (encoder, classifier)
 
 def main():
-#    training_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
-#    dev_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
+    training_filename = 'data/davidson/train.csv'
+    dev_filename = 'data/davidson/dev.csv'
 
-    training_filename = 'data/davidson/debug.csv'
-    dev_filename = 'data/davidson/debug.csv'
-
-    test_filename = 'zeerak_naacl/zeerak_naacl_tweets.csv' 
+    test_filename = 'data/davidson/test.csv' 
 
     dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
     out_filepath =  'models/{}_'.format(dataset_name) # path to save the model to
@@ -295,6 +322,6 @@ def main():
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath)
+    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, print_every=200)
 
 if __name__ == '__main__': main()
