@@ -9,6 +9,8 @@ from nltk.tokenize import TweetTokenizer
 from torch.autograd import Variable
 from torch import optim
 
+import pdb
+
 use_cuda = torch.cuda.is_available()
 HIDDEN_DIM = 64 
 labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
@@ -109,8 +111,9 @@ def read_corpus_file(corpus_filename):
     tokenizer = TweetTokenizer()
     reader = csv.DictReader(open(corpus_filename, 'r'))
     for row in reader:
-        text = process_raw_text(row['text'])
-        corpus.append(text)
+        if row['text']:
+            text = process_raw_text(row['text'])
+            corpus.append(text)
 
     return corpus
 
@@ -231,8 +234,10 @@ def evaluate_accuracy(true_labels, predicted_labels):
     return float(correct)/total * 100
 
 def main():
-    training_filename = 'zeerak_naacl/test.csv'
-    dev_filename = 'zeerak_naacl/test.csv'
+#    training_filename = 'zeerak_naacl/test.csv'
+#    dev_filename = 'zeerak_naacl/test.csv'
+    training_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
+    dev_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
     test_filename = 'zeerak_naacl/zeerak_naacl_tweets.csv' 
 
     training_corpus = read_corpus_file(training_filename)
