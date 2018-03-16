@@ -16,7 +16,11 @@ import pdb
 
 use_cuda = torch.cuda.is_available()
 HIDDEN_DIM = 64 
+
+# For Zeerak data
 labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
+# For Davidson data
+labels_to_id = {'neither': 0, 'hate_speech': 1, 'offensive_language': 2}
 
 # Class for converting from words to ids and vice-versa
 class Vocab:
