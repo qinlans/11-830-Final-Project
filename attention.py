@@ -1,8 +1,11 @@
 import csv
+import os
 import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import datetime
+import argparse
 
 from collections import defaultdict
 from nltk.tokenize import TweetTokenizer
@@ -163,8 +166,8 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, n_epochs=30,
-    print_every=500, learning_rate=.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath,
+    n_epochs=30, print_every=500, learning_rate=.1):
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
@@ -176,6 +179,8 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
     print_loss_total = 0
 
     best_dev_accuracy = 0
+
+    starting_ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S") # starting timestamp
 
     for i in range(n_epochs):
         print_epoch_loss_total = 0
@@ -201,6 +206,11 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
         if accuracy > best_dev_accuracy:
             best_dev_accuracy = accuracy
 
+            # Save encoder
+            torch.save(encoder, out_filepath + 'encoder_{}.model'.format(starting_ts))
+
+            # Save classifier
+            torch.save(classifier, out_filepath + 'classifier_{}.model'.format(starting_ts))
 
 # Runs the model as a classifier on the given instance_inputs
 def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
@@ -233,12 +243,31 @@ def evaluate_accuracy(true_labels, predicted_labels):
 
     return float(correct)/total * 100
 
+def load_model(model_path, model_ts):
+    clf_path = "{}classifier_{}.model".format(model_path, model_ts)
+    encoder_path = "{}encoder_{}.model".format(model_path, model_ts)
+    if os.path.exists(clf_path) and os.path.exists(encoder_path):
+        encoder = torch.load(encoder_path)
+        classifier = torch.load(clf_path)
+
+    return (encoder, classifier)
+
 def main():
-#    training_filename = 'zeerak_naacl/test.csv'
-#    dev_filename = 'zeerak_naacl/test.csv'
-    training_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
-    dev_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
+#    training_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
+#    dev_filename = '/usr0/home/mamille2/11-830_data/project/zeerak_naacl/test.csv'
+
+    training_filename = 'data/davidson/debug.csv'
+    dev_filename = 'data/davidson/debug.csv'
+
     test_filename = 'zeerak_naacl/zeerak_naacl_tweets.csv' 
+
+    dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
+    out_filepath =  'models/{}_'.format(dataset_name) # path to save the model to
+
+    # Argparse
+    parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
+    parser.add_argument('--load-model', nargs='?', dest='load', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
+    args = parser.parse_args()
 
     training_corpus = read_corpus_file(training_filename)
     vocab = Vocab()
@@ -250,12 +279,18 @@ def main():
     test_instances = process_instances(test_filename, vocab, labels_to_id)
     """
 
-    encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
-    classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
+    # If loading an existing model
+    if args.load:
+        encoder, classifier = load_model(out_filepath, args.load)
+
+    else:
+        encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
+        classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
+
     if use_cuda:
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id)
+    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath)
 
 if __name__ == '__main__': main()
