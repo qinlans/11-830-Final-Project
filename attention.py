@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import datetime
 import argparse
+import pickle
 
 from collections import defaultdict
 from nltk.tokenize import TweetTokenizer
@@ -167,7 +168,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath,
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath,
     n_epochs=30, print_every=500, learning_rate=.1):
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
@@ -200,7 +201,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
-        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
+        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath)
         #score = evaluate_accuracy(dev_labels, predicted_dev_labels)
         score = evaluate_f1(dev_labels, predicted_dev_labels)
         #print('Epoch %d dev accuracy: %.4f' % (i, score))
@@ -216,8 +217,11 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             torch.save(classifier, out_filepath + 'classifier_{}.model'.format(starting_ts))
 
 # Runs the model as a classifier on the given instance_inputs
-def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
+def classify(instance_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath):
+
     predicted_labels = []
+    attention_weights = []
+
     for instance_input in instance_inputs:
         encoder_hidden = encoder.init_hidden()
         input_length = instance_input.size()[0]
@@ -233,7 +237,12 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
         classifier_output, classifier_attention = classifier(encoder_outputs, encoder_hidden)
         top_value, top_label = classifier_output.data.topk(1)
         predicted_labels.append(Variable(top_label.squeeze(0)))
+        attention_weights.append(classifier_attention.data.cpu().tolist())
 
+    # Save attn weights
+    with open(weight_filepath, 'wb') as f:
+        pickle.dump(attention_weights, f)
+            
     return predicted_labels
 
 def evaluate_accuracy(true_labels, predicted_labels):
@@ -287,13 +296,17 @@ def load_model(model_path, model_ts):
     return (encoder, classifier)
 
 def main():
-    training_filename = 'data/davidson/train.csv'
-    dev_filename = 'data/davidson/dev.csv'
+    training_filename = 'data/davidson/debug.csv'
+    dev_filename = 'data/davidson/debug.csv'
+
+    #training_filename = 'data/davidson/train.csv'
+    #dev_filename = 'data/davidson/dev.csv'
 
     test_filename = 'data/davidson/test.csv' 
 
     dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
     out_filepath =  'models/{}_'.format(dataset_name) # path to save the model to
+    weight_filepath = 'output/{}_attn.pkl'.format(dataset_name) # filepath for attention weights
 
     # Argparse
     parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
@@ -322,6 +335,6 @@ def main():
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, print_every=200)
+    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, print_every=200)
 
 if __name__ == '__main__': main()
