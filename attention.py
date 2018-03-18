@@ -168,7 +168,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath,
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, preds_filepath,
     n_epochs=30, print_every=500, learning_rate=.1):
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
@@ -201,12 +201,18 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
-        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath)
-        #score = evaluate_accuracy(dev_labels, predicted_dev_labels)
-        score = evaluate_f1(dev_labels, predicted_dev_labels)
+        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath, preds_filepath)
+        #acc = evaluate_accuracy(dev_labels, predicted_dev_labels)
+        prec, rec, f1 = evaluate_f1(dev_labels, predicted_dev_labels)
+        
         #print('Epoch %d dev accuracy: %.4f' % (i, score))
-        print('Epoch %d dev f1: %.4f' % (i, score))
+        print('Epoch %d dev f1: %.4f' % (i, f1))
+        print('Epoch %d dev precision: %.4f' % (i, prec))
+        print('Epoch %d dev recall: %.4f' % (i, rec))
         print('----------------------------------')
+
+        score = f1
+
         if score > best_dev_score:
             best_dev_score = score
 
@@ -217,7 +223,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             torch.save(classifier, out_filepath + 'classifier_{}.model'.format(starting_ts))
 
 # Runs the model as a classifier on the given instance_inputs
-def classify(instance_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath):
+def classify(instance_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath, preds_filepath):
 
     predicted_labels = []
     attention_weights = []
@@ -242,6 +248,11 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id, weight_f
     # Save attn weights
     with open(weight_filepath, 'wb') as f:
         pickle.dump(attention_weights, f)
+
+    # Save predictions
+    preds = [p.data.cpu().tolist()[0] for p in predicted_labels]
+    with open(preds_filepath, 'wb') as f:
+        pickle.dump(preds, f)
             
     return predicted_labels
 
@@ -284,7 +295,7 @@ def evaluate_f1(true_labels, predicted_labels):
     else:
        f1 = 2 * prec * rec / (prec + rec) * 100  
 
-    return f1
+    return prec, rec, f1
 
 def load_model(model_path, model_ts):
     clf_path = "{}classifier_{}.model".format(model_path, model_ts)
@@ -305,8 +316,10 @@ def main():
     test_filename = 'data/davidson/test.csv' 
 
     dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
+    fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
     out_filepath =  'models/{}_'.format(dataset_name) # path to save the model to
-    weight_filepath = 'output/{}_attn.pkl'.format(dataset_name) # filepath for attention weights
+    weight_filepath = 'output/{}_{}_attn.pkl'.format(dataset_name, fold_name) # filepath for attention weights
+    preds_filepath = 'output/{}_{}_preds.pkl'.format(dataset_name, fold_name) # filepath for predictions
 
     # Argparse
     parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
@@ -335,6 +348,6 @@ def main():
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, print_every=200)
+    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, preds_filepath, print_every=200)
 
 if __name__ == '__main__': main()
