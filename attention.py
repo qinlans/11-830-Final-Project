@@ -296,11 +296,11 @@ def load_model(model_path, model_ts):
     return (encoder, classifier)
 
 def main():
-    training_filename = 'data/davidson/debug.csv'
-    dev_filename = 'data/davidson/debug.csv'
+#    training_filename = 'data/davidson/debug.csv'
+#    dev_filename = 'data/davidson/debug.csv'
 
-    #training_filename = 'data/davidson/train.csv'
-    #dev_filename = 'data/davidson/dev.csv'
+    training_filename = 'data/davidson/train.csv'
+    dev_filename = 'data/davidson/dev.csv'
 
     test_filename = 'data/davidson/test.csv' 
 
