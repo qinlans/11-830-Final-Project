@@ -27,10 +27,6 @@ class Vocab:
         self.id_to_word = []
         self.word_to_id['<UNK>'] = 0
         self.id_to_word.append('<UNK>')
-        self.word_to_id['<SENT>'] = 1
-        self.id_to_word.append('<SENT>')
-        self.word_to_id['</SENT>'] = 2
-        self.id_to_word.append('</SENT>')
 
     # Given a corpus, build token to id and id to token dictionaries for words
     # that occur more frequently than unk_threshold
@@ -106,28 +102,26 @@ class AttentionClassifier(nn.Module):
 def process_raw_text(raw_text):
     tokenizer = TweetTokenizer()
     text = tokenizer.tokenize(raw_text.lower())
-    text = ['<SENT>'] + text
-    text.append('</SENT>')
     return text
 
 # Read in file containing text for building the training vocabulary
-def read_corpus_file(corpus_filename):
+def read_corpus_file(corpus_filename, text_colname):
     corpus = []
     tokenizer = TweetTokenizer()
     reader = csv.DictReader(open(corpus_filename, 'r'))
     for row in reader:
-        if row['text']:
-            text = process_raw_text(row['text'])
+        if row[text_colname]:
+            text = process_raw_text(row[text_colname])
             corpus.append(text)
 
     return corpus
 
 # Read file containing text and label pairs and converts them into Variables
-def process_instances(instances_filename, vocab, labels_to_id):
+def process_instances(instances_filename, vocab, labels_to_id, text_colname):
     instances = []
     reader = csv.DictReader(open(instances_filename, 'r'))
     for row in reader:
-        text = process_raw_text(row['text'])
+        text = process_raw_text(row[text_colname])
         text_ids = [vocab.get_word_id(word) for word in text]
         text_variable = Variable(torch.LongTensor(text_ids).view(-1, 1))
         label = Variable(torch.LongTensor([labels_to_id[row['label']]]))
@@ -310,28 +304,35 @@ def main():
 #    training_filename = 'data/davidson/debug.csv'
 #    dev_filename = 'data/davidson/debug.csv'
 
-    training_filename = 'data/davidson/train.csv'
-    dev_filename = 'data/davidson/dev.csv'
+#    training_filename = 'data/davidson/train.csv'
+#    dev_filename = 'data/davidson/dev.csv'
+
+    training_filename = 'data/davidson/train_unked.csv'
+    dev_filename = 'data/davidson/dev_unked.csv'
 
     test_filename = 'data/davidson/test.csv' 
+
+    #text_colname = 'text'
+    text_colname = 'tweet_unk_slur'
+    #text_colname = 'tweet_no_slur'
 
     dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
     fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
     out_filepath =  'models/{}_'.format(dataset_name) # path to save the model to
-    weight_filepath = 'output/{}_{}_attn.pkl'.format(dataset_name, fold_name) # filepath for attention weights
-    preds_filepath = 'output/{}_{}_preds.pkl'.format(dataset_name, fold_name) # filepath for predictions
+    weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(dataset_name, text_colname, fold_name) # filepath for attention weights
+    preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(dataset_name, text_colname, fold_name) # filepath for predictions
 
     # Argparse
     parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
     parser.add_argument('--load-model', nargs='?', dest='load', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
     args = parser.parse_args()
 
-    training_corpus = read_corpus_file(training_filename)
+    training_corpus = read_corpus_file(training_filename, text_colname)
     vocab = Vocab()
     vocab.build_vocab(training_corpus)
 
-    training_instances = process_instances(training_filename, vocab, labels_to_id)
-    dev_instances = process_instances(dev_filename, vocab, labels_to_id)
+    training_instances = process_instances(training_filename, vocab, labels_to_id, text_colname)
+    dev_instances = process_instances(dev_filename, vocab, labels_to_id, text_colname)
     """
     test_instances = process_instances(test_filename, vocab, labels_to_id)
     """
