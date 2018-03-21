@@ -183,10 +183,12 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
         print 'Training epoch ' + str(i)
         random.shuffle(training_instances)
         for j, instance in enumerate(training_instances):
-            loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
-                criterion)
-            print_loss_total += loss
-            print_epoch_loss_total += loss
+            # Check if instance nonempty
+            if len(instance[0].size()) > 0:
+                loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
+                    criterion)
+                print_loss_total += loss
+                print_epoch_loss_total += loss
 
             if j !=0 and j % print_every == 0:
                 print_loss_avg = print_loss_total/print_every
@@ -216,8 +218,17 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             # Save classifier
             torch.save(classifier, out_filepath + 'classifier_{}.model'.format(starting_ts))
 
+            # Save attn weights
+            with open(weight_filepath, 'wb') as f:
+                pickle.dump(attention_weights, f)
+
+            # Save predictions
+            preds = [p.data.cpu().tolist()[0] for p in predicted_labels]
+            with open(preds_filepath, 'wb') as f:
+                pickle.dump(preds, f)
+
 # Runs the model as a classifier on the given instance_inputs
-def classify(instance_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath, preds_filepath):
+def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
 
     predicted_labels = []
     attention_weights = []
@@ -239,16 +250,8 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id, weight_f
         predicted_labels.append(Variable(top_label.squeeze(0)))
         attention_weights.append(classifier_attention.data.cpu().tolist())
 
-    # Save attn weights
-    with open(weight_filepath, 'wb') as f:
-        pickle.dump(attention_weights, f)
-
-    # Save predictions
-    preds = [p.data.cpu().tolist()[0] for p in predicted_labels]
-    with open(preds_filepath, 'wb') as f:
-        pickle.dump(preds, f)
             
-    return predicted_labels
+    return predicted_labels, attention_weights, preds
 
 def evaluate_accuracy(true_labels, predicted_labels):
     correct = 0
@@ -313,8 +316,8 @@ def main():
     test_filename = 'data/davidson/test.csv' 
 
     #text_colname = 'text'
-    text_colname = 'tweet_unk_slur'
-    #text_colname = 'tweet_no_slur'
+    #text_colname = 'tweet_unk_slur'
+    text_colname = 'tweet_no_slur'
 
     dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
     fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
@@ -349,6 +352,6 @@ def main():
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, preds_filepath, print_every=200)
+    train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, preds_filepath, print_every=500)
 
 if __name__ == '__main__': main()
