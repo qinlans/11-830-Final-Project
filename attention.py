@@ -197,7 +197,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
-        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id, weight_filepath, preds_filepath)
+        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
         #acc = evaluate_accuracy(dev_labels, predicted_dev_labels)
         prec, rec, f1 = evaluate_f1(dev_labels, predicted_dev_labels)
         
