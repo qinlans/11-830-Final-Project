@@ -197,7 +197,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
-        predicted_dev_labels = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
+        predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
         #acc = evaluate_accuracy(dev_labels, predicted_dev_labels)
         prec, rec, f1 = evaluate_f1(dev_labels, predicted_dev_labels)
         
@@ -223,7 +223,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
                 pickle.dump(attention_weights, f)
 
             # Save predictions
-            preds = [p.data.cpu().tolist()[0] for p in predicted_labels]
+            preds = [p.data.cpu().tolist()[0] for p in predicted_dev_labels]
             with open(preds_filepath, 'wb') as f:
                 pickle.dump(preds, f)
 
@@ -235,6 +235,9 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
 
     for instance_input in instance_inputs:
         encoder_hidden = encoder.init_hidden()
+        if len(instance_input.size()) == 0:
+            continue
+
         input_length = instance_input.size()[0]
 
         encoder_outputs = Variable(torch.zeros(input_length, encoder.hidden_size*2))
@@ -251,7 +254,7 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
         attention_weights.append(classifier_attention.data.cpu().tolist())
 
             
-    return predicted_labels, attention_weights, preds
+    return predicted_labels, attention_weights
 
 def evaluate_accuracy(true_labels, predicted_labels):
     correct = 0
