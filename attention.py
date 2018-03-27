@@ -175,6 +175,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
     print_loss_total = 0
 
     best_dev_score = 0
+    best_dev_results = ''
 
     starting_ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S") # starting timestamp
 
@@ -211,6 +212,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
         if score > best_dev_score:
             best_dev_score = score
+            best_dev_results = 'Best so far f1 %.4f, precision %.4f, recall %.4f' % (f1, prec, rec)
 
             # Save encoder
             torch.save(encoder, out_filepath + 'encoder_{}.model'.format(starting_ts))
@@ -226,6 +228,8 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             preds = [p.data.cpu().tolist()[0] for p in predicted_dev_labels]
             with open(preds_filepath, 'wb') as f:
                 pickle.dump(preds, f)
+
+        print(best_dev_results)
 
 # Runs the model as a classifier on the given instance_inputs
 def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
@@ -319,8 +323,8 @@ def main():
     test_filename = 'data/davidson/test.csv' 
 
     #text_colname = 'text'
-    #text_colname = 'tweet_unk_slur'
-    text_colname = 'tweet_no_slur'
+    text_colname = 'tweet_unk_slur'
+    #text_colname = 'tweet_no_slur'
 
     dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
     fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
