@@ -125,11 +125,11 @@ def get_one_hot_vector(i, size=3):
     return vec
 
 
-def make_debug_df(df, size=30):
+def make_debug_df(df, size=30, cols=['hate_speech', 'offensive_language', 'neither']):
     """Make a small, balanced DataFrame for debugging."""
     sample_size = int(size / 3)
     debug = None
-    for col in ['hate_speech', 'offensive_language', 'neither']:
+    for col in cols:
         msk = df[col] == 1
         if debug is None:
             debug = df[msk].sample(sample_size)

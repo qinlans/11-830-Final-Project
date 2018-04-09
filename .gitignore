@@ -2,4 +2,4 @@
 __pycache__/
 
 # Jupyter Notebook
-.ipynb_checkpoints/s
+.ipynb_checkpoints/*
