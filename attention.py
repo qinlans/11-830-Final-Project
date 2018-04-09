@@ -17,8 +17,8 @@ import pdb
 
 use_cuda = torch.cuda.is_available()
 HIDDEN_DIM = 64 
-#labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
-labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
+labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
+#labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
 
 # Class for converting from words to ids and vice-versa
 class Vocab:
@@ -121,6 +121,8 @@ def process_instances(instances_filename, vocab, labels_to_id, text_colname):
     instances = []
     reader = csv.DictReader(open(instances_filename, 'r'))
     for row in reader:
+        if not text_colname in row:
+            pdb.set_trace()
         text = process_raw_text(row[text_colname])
         text_ids = [vocab.get_word_id(word) for word in text]
         text_variable = Variable(torch.LongTensor(text_ids).view(-1, 1))
@@ -317,13 +319,14 @@ def main():
 #    training_filename = 'data/davidson/train.csv'
 #    dev_filename = 'data/davidson/dev.csv'
 
-    training_filename = 'data/davidson/train_unked.csv'
-    dev_filename = 'data/davidson/dev_unked.csv'
+    training_filename = 'data/zeerak_naacl/train_utf8.csv'
+    dev_filename = 'data/zeerak_naacl/dev_utf8.csv'
 
-    test_filename = 'data/davidson/test.csv' 
+    test_filename = 'data/zeerak_naacl/test_utf8.csv' 
 
     #text_colname = 'text'
-    text_colname = 'tweet_unk_slur'
+    text_colname = 'tweet'
+    #text_colname = 'tweet_unk_slur'
     #text_colname = 'tweet_no_slur'
 
     dataset_name = os.path.split(os.path.dirname(training_filename))[1] # parent dir of training filename
