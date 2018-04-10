@@ -101,15 +101,19 @@ def main():
     print("done.")
     sys.stdout.flush()
 
-    print("Training, evaluating classifier...", end=" ")
+    print("Training classifier...", end=" ")
     sys.stdout.flush()
     clf = LogisticRegression()
     clf.fit(X_train, y_train)
-    preds = clf.predict(X_dev)
     print("done.")
     sys.stdout.flush()
 
+    print("Evaluating classifier...", end=" ")
+    sys.stdout.flush()
+    preds = clf.predict(X_dev)
     prec, rec, f1, acc = evaluate(preds, y_dev)
+    print("done.")
+    sys.stdout.flush()
 
     print()
     print(f'Precision: {prec}')
