@@ -3,11 +3,13 @@ import sys
 import numpy as np
 import pandas as pd
 import html
+import pdb
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, accuracy_score, recall_score, precision_score
 
 from nltk.tokenize import TweetTokenizer
+
 
 
 class DataHandler():
@@ -48,30 +50,12 @@ class DataHandler():
 
         labels = {}
         for f in self.folds:
-            labels[f] = self.data[f][self.text_colname].tolist()
+            labels[f] = self.data[f][self.outcome_colname].tolist()
 
         return bow['train'], labels['train'], bow['dev'], labels['dev']
 
 
 def evaluate(preds, y):
-
-    #correct_hs = 0
-    #correct_athg = 0
-    #pred_hs = sum(preds)
-    #actual_hs = sum(gold)
-    #total = len(preds)
-
-    #for tl, pl in zip(preds, gold):
-    #    if tl == pl == 1:
-    #        correct_hs += 1
-    #        correct_athg += 1
-    #    elif tl == pl == 0:
-    #        correct_athg += 1
-    #        
-    #prec = correct_hs/pred_hs
-    #rec = correct_hs/actual_hs
-    #f1 = 2 * prec * rec / (prec + rec)
-    #acc = correct_athg/total
 
     prec = precision_score(preds, y)
     rec = recall_score(preds, y)
