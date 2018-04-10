@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import pandas as pd
 import html
@@ -43,9 +44,7 @@ class DataHandler():
 
         bow = {}
         bow['train'] = vec.transform(text_data['train'])
-        print(bow['train'].shape)
         bow['dev'] = vec.transform(text_data['dev'])
-        print(bow['dev'].shape)
 
         labels = {}
         for f in self.folds:
@@ -84,11 +83,15 @@ def evaluate(preds, y):
 
 def main():
 
+    #base_dirpath = '/usr0/home/mamille2/11-830-Final-Project/data/' # for misty
+    base_dirpath = '/usr2/mamille2/11-830-Final-Project/data/' # for erebor
+    data_dirpath = os.path.join(base_dirpath, 'zeerak_naacl')
+
     dh = DataHandler()
 
     print("Loading data...", end=" ")
     sys.stdout.flush()
-    dh.load_data('/usr0/home/mamille2/11-830-Final-Project/data/zeerak_naacl/')
+    dh.load_data(data_dirpath)
     print("done.")
     sys.stdout.flush()
 
@@ -98,7 +101,7 @@ def main():
     print("done.")
     sys.stdout.flush()
 
-    print("Training, evaluating classifiers...", end=" ")
+    print("Training, evaluating classifier...", end=" ")
     sys.stdout.flush()
     clf = LogisticRegression()
     clf.fit(X_train, y_train)
