@@ -14,7 +14,6 @@ from nltk.tokenize import TweetTokenizer
 
 class DataHandler():
 
-
     def __init__(self):
         self.folds = ['train', 'dev', 'test']
         self.data_dirpath = None
@@ -65,11 +64,18 @@ class DataHandler():
         return bow['train'], labels['train'], bow['dev'], labels['dev'], bow['test'], labels['test']
 
 
-def evaluate(preds, y):
+def evaluate(preds, y, multiclass=False, labels=None):
 
-    prec = precision_score(preds, y, average='micro')
-    rec = recall_score(preds, y, average='micro')
-    f1 = f1_score(preds, y, average='micro')
+    if multiclass:
+        prec = precision_score(preds, y, average='micro', labels=labels)
+        rec = recall_score(preds, y, average='micro', labels=labels)
+        f1 = f1_score(preds, y, average='micro', labels=labels)
+
+    else:
+        prec = precision_score(preds, y)
+        rec = recall_score(preds, y)
+        f1 = f1_score(preds, y)
+
     acc = accuracy_score(preds, y)
 
     return prec, rec, f1, acc
@@ -77,15 +83,22 @@ def evaluate(preds, y):
 
 def main():
 
+    # Settings
+    #dataset = 'davidson'
+    dataset = 'zeerak_naacl'
+
+    #multiclass = False
+    multiclass = True
+    labels = [1,2] # for multiclass evaluation
+
+    #feats = 'unigrams'
+    feats = 'bigrams'
+
     base_dirpath = '/usr0/home/mamille2/11-830-Final-Project/data/' # for misty
     #base_dirpath = '/usr2/mamille2/11-830-Final-Project/data/' # for erebor
-    #data_dirpath = os.path.join(base_dirpath, 'zeerak_naacl')
-    data_dirpath = os.path.join(base_dirpath, 'davidson')
+    data_dirpath = os.path.join(base_dirpath, dataset)
 
     dh = DataHandler()
-
-    clf_type = 'multiclass'
-    #clf_type = 'binary'
 
     print("Loading data...", end=" ")
     sys.stdout.flush()
@@ -95,17 +108,27 @@ def main():
 
     print("Processing data...", end=" ")
     sys.stdout.flush()
-    #X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'hate')
-    #X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('text', 'hate_speech') # davidson, binary classification
+    
+    if multiclass:
+        if dataset == 'davidson':
+            X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'label', feats=feats, multiclass_transform = {'neither': 0, 'offensive_language': 1, 'hate_speech': 2})
 
-    # davidson, multiclass
-    X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('text', 'label', feats='bigrams', multiclass_transform = {'neither': 0, 'offensive_language': 1, 'hate_speech': 2})
+        elif dataset == 'zeerak_naacl':
+            X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'label', feats=feats, multiclass_transform = {'none': 0, 'racism': 1, 'sexism': 2}) 
+
+    else:
+        if dataset=='davidson':
+            X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'hate_speech', feats=feats) 
+
+        elif dataset == 'zeerak_naacl':
+            X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'label', feats=feats, multiclass_transform = {'none': 0, 'racism': 1, 'sexism': 1}) 
+
     print("done.")
     sys.stdout.flush()
 
     print("Training classifier...", end=" ")
     sys.stdout.flush()
-    if clf_type == 'multiclass':
+    if multiclass:
         clf = OneVsRestClassifier(LogisticRegression())
     else:
         clf = LogisticRegression()
@@ -115,10 +138,14 @@ def main():
 
     print("Evaluating classifier...", end=" ")
     sys.stdout.flush()
-    #preds = clf.predict(X_dev)
-    #prec, rec, f1, acc = evaluate(preds, y_dev)
     preds = clf.predict(X_test)
-    prec, rec, f1, acc = evaluate(preds, y_test)
+
+    if multiclass:
+        prec, rec, f1, acc = evaluate(preds, y_test, multiclass=multiclass, labels=labels)
+
+    else:
+        prec, rec, f1, acc = evaluate(preds, y_test, multiclass=multiclass)
+
     print("done.")
     sys.stdout.flush()
 
