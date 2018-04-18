@@ -1,4 +1,4 @@
-text,hate_speech,offensive_language,neither,mentions,hashtags,original_tweet,label
+text,hate_speech,offensive_language,neither,mentions,hashtags,tweet,label
 <MENTION> <MENTION> that was my mock done on a simulator check it out pick your team how many rounds and go for it,0,0,1,"['@SportsGrind', '@RudyJay711']",[],@SportsGrind @RudyJay711 that was my mock done on a simulator check it out pick your team how many rounds and go for it,neither
 <MENTION> look at ya boy <MENTION> <MENTION> nigga a faggot <MENTION> bruh <MENTION> chance the rapper <URL>,1,0,0,"['@BadNewsAli', '@Quanb24', '@DrydenNeal', '@So_Leaux', '@worstrapIyrics']",[],RT @BadNewsAli: Look at ya boy @Quanb24 RT @DrydenNeal: Nigga a faggot RT @So_Leaux: Bruh RT @worstrapIyrics: Chance The Rapper http://t.co?,hate_speech
 johnny rebel quit your bitchin nigger <URL>,1,0,0,[],[],Johnny Rebel - Quit your bitchin' nigger!: http://t.co/uCGhrY7zGe,hate_speech
