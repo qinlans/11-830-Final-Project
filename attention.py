@@ -27,7 +27,7 @@ labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
 # Class for converting from words to ids and vice-versa
 class Vocab:
     def __init__(self):
-        self.word_to_id = defaultdict(lambda: 0)
+        self.word_to_id = defaultdict(int)
         self.id_to_word = []
         self.word_to_id['<UNK>'] = 0
         self.id_to_word.append('<UNK>')
@@ -35,7 +35,7 @@ class Vocab:
     # Given a corpus, build token to id and id to token dictionaries for words
     # that occur more frequently than unk_threshold
     def build_vocab(self, corpus, unk_threshold=1):
-        word_count = defaultdict(lambda: 0)
+        word_count = defaultdict(int)
         for text in corpus:
             for word in text:
                 word_count[word] += 1
@@ -236,8 +236,8 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             best_classifier = classifier
 
             # Save vocab
-            with open(os.path.join(out_dirpath, 'vocab.pkl', 'wb') as f:
-                pickle.dump(f, vocab)
+            with open(os.path.join(out_dirpath, 'vocab.pkl'), 'wb') as f:
+                pickle.dump(vocab, f)
 
             # Save attn weights
             with open(weight_filepath, 'wb') as f:
@@ -349,13 +349,13 @@ def main():
     args = parser.parse_args()
 
     if args.dataset_name == 'davidson':
-        #training_filename = 'data/davidson/debug.csv'
-        #dev_filename = 'data/davidson/debug.csv'
-        #test_filename = 'data/davidson/debug.csv'
+        training_filename = 'data/davidson/debug.csv'
+        dev_filename = 'data/davidson/debug.csv'
+        test_filename = 'data/davidson/debug.csv'
 
-        training_filename = 'data/davidson/train.csv'
-        dev_filename = 'data/davidson/dev.csv'
-        test_filename = 'data/davidson/test.csv' 
+        #training_filename = 'data/davidson/train.csv'
+        #dev_filename = 'data/davidson/dev.csv'
+        #test_filename = 'data/davidson/test.csv' 
 
         text_colname = 'text'
 
@@ -376,10 +376,6 @@ def main():
     weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for attention weights
     preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for predictions
 
-    training_instances = process_instances(training_filename, vocab, labels_to_id, text_colname)
-    dev_instances = process_instances(dev_filename, vocab, labels_to_id, text_colname)
-    test_instances = process_instances(test_filename, vocab, labels_to_id, text_colname)
-
     # If loading an existing model
     if args.load:
         print("Loading model...")
@@ -392,6 +388,10 @@ def main():
 
         encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
         classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
+
+    training_instances = process_instances(training_filename, vocab, labels_to_id, text_colname)
+    dev_instances = process_instances(dev_filename, vocab, labels_to_id, text_colname)
+    test_instances = process_instances(test_filename, vocab, labels_to_id, text_colname)
 
     if use_cuda:
         encoder = encoder.cuda()
