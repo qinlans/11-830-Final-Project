@@ -346,7 +346,7 @@ def evaluate_f1(true_labels, predicted_labels):
     else:
        f1 = 2 * prec * rec / (prec + rec) * 100  
 
-    return prec, rec, f1
+    return prec*100, rec*100, f1
 
 def load_model(model_path, model_ts):
     dirpath = os.path.join(model_path, model_ts)
