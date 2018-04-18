@@ -196,7 +196,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, preds_filepath, slur_set, criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
