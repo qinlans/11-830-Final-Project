@@ -380,20 +380,20 @@ def main():
     args = parser.parse_args()
 
     if args.dataset_name == 'davidson':
-        training_filename = 'data/davidson/debug.csv'
-        dev_filename = 'data/davidson/debug.csv'
-        test_filename = 'data/davidson/debug.csv'
+        #training_filename = 'data/davidson/debug.csv'
+        #dev_filename = 'data/davidson/debug.csv'
+        #test_filename = 'data/davidson/debug.csv'
 
-        #training_filename = 'data/davidson/train.csv'
-        #dev_filename = 'data/davidson/dev.csv'
-        #test_filename = 'data/davidson/test.csv' 
+        training_filename = 'data/davidson/train.csv'
+        dev_filename = 'data/davidson/dev.csv'
+        test_filename = 'data/davidson/test.csv' 
 
         text_colname = 'text'
 
     elif args.dataset_name == 'zeerak_naacl':
-        training_filename = 'data/zeerak_naacl/train_utf8.csv'
-        dev_filename = 'data/zeerak_naacl/dev_utf8.csv'
-        test_filename = 'data/zeerak_naacl/test_utf8.csv' 
+        training_filename = 'data/zeerak_naacl/train.csv'
+        dev_filename = 'data/zeerak_naacl/dev.csv'
+        test_filename = 'data/zeerak_naacl/test.csv' 
         text_colname = 'tweet'
 
     else:
