@@ -161,7 +161,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     instance_input, instance_label = instance
     input_length = instance_input.size()[0]
 
-    instance_ids = instance_input.view(-1).data.numpy()
+    instance_ids = instance_input.view(-1).data.cpu().numpy()
     instance_slurs = [1 if x in slur_set else 0 for x in instance_ids]
     slur_mask = Variable(torch.FloatTensor(instance_slurs).view(1, 1, -1))
     zero_attention = Variable(torch.zeros(1, 1, input_length))
@@ -196,12 +196,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
-        reverse_gradient=False, criterion=torch.nn.CrossEntropyLoss(), n_epochs=30, print_every=500, learning_rate=.1):
-
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id,
-    out_filepath, weight_filepath, preds_filepath, slur_set, criterion=torch.nn.CrossEntropyLoss(),
-    reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_filepath, weight_filepath, preds_filepath, slur_set, criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
@@ -388,17 +383,15 @@ def main():
         dev_filename = 'data/davidson/dev.csv'
         test_filename = 'data/davidson/test.csv' 
 
-        text_colname = 'text'
-
     elif args.dataset_name == 'zeerak_naacl':
         training_filename = 'data/zeerak_naacl/train.csv'
         dev_filename = 'data/zeerak_naacl/dev.csv'
         test_filename = 'data/zeerak_naacl/test.csv' 
-        text_colname = 'tweet'
 
     else:
         raise ValueError("No dataset name given")
 
+    text_colname = 'tweet'
     #text_colname = 'tweet_unk_slur'
     #text_colname = 'tweet_no_slur'
 
@@ -406,13 +399,6 @@ def main():
     out_dirpath =  'models/{}_'.format(args.dataset_name) # path to save the model files to
     weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for attention weights
     preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for predictions
-
-    slur_filename = 'data/hatebase_slurs.txt'
-    slur_set = read_slur_file(slur_filename, vocab)
-
-    training_instances = process_instances(training_filename, vocab, labels_to_id, text_colname)
-    dev_instances = process_instances(dev_filename, vocab, labels_to_id, text_colname)
-    test_instances = process_instances(test_filename, vocab, labels_to_id)
 
     # If loading an existing model
     if args.load:
@@ -430,6 +416,9 @@ def main():
     training_instances = process_instances(training_filename, vocab, labels_to_id, text_colname)
     dev_instances = process_instances(dev_filename, vocab, labels_to_id, text_colname)
     test_instances = process_instances(test_filename, vocab, labels_to_id, text_colname)
+
+    slur_filename = 'data/hatebase_slurs.txt'
+    slur_set = read_slur_file(slur_filename, vocab)
 
     if use_cuda:
         encoder = encoder.cuda()
