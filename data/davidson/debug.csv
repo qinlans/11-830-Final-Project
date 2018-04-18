@@ -1,4 +1,4 @@
-text,hate_speech,offensive_language,neither,mentions,hashtags,original_tweet,label
+text,hate_speech,offensive_language,neither,mentions,hashtags,tweet,label
 <MENTION> <MENTION> that was my mock done on a simulator check it out pick your team how many rounds and go for it,0,0,1,"['@SportsGrind', '@RudyJay711']",[],@SportsGrind @RudyJay711 that was my mock done on a simulator check it out pick your team how many rounds and go for it,neither
 <MENTION> look at ya boy <MENTION> <MENTION> nigga a faggot <MENTION> bruh <MENTION> chance the rapper <URL>,1,0,0,"['@BadNewsAli', '@Quanb24', '@DrydenNeal', '@So_Leaux', '@worstrapIyrics']",[],RT @BadNewsAli: Look at ya boy @Quanb24 RT @DrydenNeal: Nigga a faggot RT @So_Leaux: Bruh RT @worstrapIyrics: Chance The Rapper http://t.co?,hate_speech
 johnny rebel quit your bitchin nigger <URL>,1,0,0,[],[],Johnny Rebel - Quit your bitchin' nigger!: http://t.co/uCGhrY7zGe,hate_speech
@@ -31,3 +31,36 @@ im soooooo tired of this dick dyke showing up on my fb feed real studs dont fucc
 <MENTION> careful they might try to queer ya,0,1,0,['@SteveMartinToGo'],[],"@SteveMartinToGo careful, they might try to queer ya!",offensive_language
 faggots <URL>,1,0,0,[],[],faggots http://t.co/DMKbGhai1z,hate_speech
 <MENTION> looks like a less squinty eyed <MENTION> to me hmm,0,0,1,"['@Strangleme', '@mikelreparaz']",[],@Strangleme Looks like a less-squinty-eyed @mikelreparaz to me. Hmm...,neither
+i think dat <MENTION> called me a nigger what do move away from da dark side mean,hate_speech,['@Miss_Facetious'],[],['nigger'],"I think dat @Miss_Facetious called me a nigger!
+What do move away from da dark side mean?",1,0,0
+<MENTION> don t be a hurt little faggot,hate_speech,['@leiacatherinexx'],[],['faggot'],@leiacatherinexx don’t be a hurt little faggot,1,0,0
+<MENTION> <MENTION> bitch got the crew hype an still got her ass beat tonight should have brought him to us,offensive_language,"['@BlakeAnderson21@dalton_ryann', '@justinmiculka01']",[],['bitch'],@BlakeAnderson21@dalton_ryann @justinmiculka01 bitch got the crew hype an still got her ass beat tonight should have brought him to us,0,1,0
+after bo1 <MENTION> <MENTION> bruh lol i retired after mw2 because everything was trash afterwards,neither,"['@TheGodWriter_', '@iDocLyfe']",[],['trash'],*after BO1 RT @TheGodWriter_: @iDocLyfe Bruh lol I retired after mw2 because everything was trash afterwards.,0,0,1
+<MENTION> i know how you feel wait no i don t perfect week for me would be yanks not getting lee # gosox # gopats,neither,['@edouglas528'],"['#goSox', '#goPats']",['yanks'],"@edouglas528 I know how you feel,wait,no I don't. Perfect week for me would be Yanks not getting Lee #goSox #goPats",0,0,1
+<MENTION> retweet if ur dick will choke a bitch 😂,offensive_language,['@badgalZolanski'],[],['bitch'],RT @badgalZolanski: Retweet if ur dick will choke a bitch 😂,0,1,0
+8 16 14 mo <MENTION> let kill some crackers kill their babies new black panthers hijack his # ferguson presser <URL>,hate_speech,['@GovJayNixon'],['#Ferguson'],['crackers'],"8/16/14 MO @GovJayNixon let “kill some crackers, kill their babies"" New Black Panthers hijack his #Ferguson presser http://t.co/z2Wko9Ripz",1,0,0
+<MENTION> <MENTION> then faggot,hate_speech,"['@seansteiger31', '@me']",[],['faggot'],@seansteiger31 @ me then faggot,1,0,0
+<MENTION> you ain t got no hoes lil jess you re a lil guy,offensive_language,['@JayyRosayy'],[],"['hoes', 'hoes']",@JayyRosayy you ain't got no hoes lil jess you're a lil guy,0,1,0
+the bucs has 2 great uniforms and ruined them both for that trash smh,neither,[],[],['trash'],The Bucs has 2 great uniforms and ruined them both for that trash smh,0,0,1
+their salsa negro is awesome <MENTION> <MENTION>,neither,"['@StacyMungo', '@Loriisright']",[],[],Their salsa negro is awesome... @StacyMungo @Loriisright,0,0,1
+can someone treat me to some grub i m broke bitch over here,offensive_language,[],[],['bitch'],Can someone treat me to some grub? I'm broke bitch over here.,0,1,0
+10 <MENTION> 1 5 <MENTION> on average 2 but i can be an 8 when need be <MENTION> on a scale of 1 10 how ghetto are u,neither,"['@ParadoxicalMike', '@iDavey', '@SinsOfMyFather_']",[],['ghetto'],"10 RT @ParadoxicalMike 1.5 RT @iDavey On average, 2. But I can be an 8 when need be. ""@SinsOfMyFather_ On a scale of 1-10 how ghetto are u?""",0,0,1
+krakin this bitch ipem at 12 who sippin wit me elements <URL>,offensive_language,[],[],['bitch'],Krakin this bitch ipem at 12... WHO SIPPIN WIT ME... ELEMENTS http://t.co/lGCM88hsnP,0,1,0
+<MENTION> on my way to fuck your bitch <URL> lmfao kittycopter,offensive_language,['@VineForTheByrd'],[],['bitch'],"""@VineForTheByrd: On my way to fuck your bitch https://t.co/4lMTFNL2iy""
+
+LMFAO KITTYCOPTER",0,1,0
+<MENTION> wow u hoe is the term for women,hate_speech,['@garrett_winker'],[],['hoe'],@garrett_winker wow u hoe is the term for women,1,0,0
+you said you be smoking strong but your wrong you been smoking trash it s not in my lungs if it ain t that pressure,neither,[],[],['trash'],You said you be smoking strong but your wrong you been smoking trash it's not in my lungs if it ain't that pressure.,0,0,1
+<MENTION> just to settle it once and for all which came first the chicken or the egg the egg laid by a bird that was not a chicken,neither,['@neiltyson'],[],"['bird', 'egg']",RT @neiltyson: Just to settle it once and for all: Which came first the Chicken or the Egg? The Egg -- laid by a bird that was not a Chicken,0,0,1
+<MENTION> final debate clean up journalists sure know how to trash a lobby # wcvbpoli # wcvb <URL>,neither,['@russnelligan'],"['#wcvbpoli', '#wcvb']",['trash'],RT @russnelligan: Final debate clean-up: journalists sure know how to trash a lobby... #wcvbpoli #wcvb http://t.co/LMerSj8sTi,0,0,1
+<MENTION> <MENTION> lmao angela you look like a damn potato bitch keep talkin,offensive_language,"['@Bombfantasyyy', '@Angela_Mastr']",[],['bitch'],"@Bombfantasyyy @Angela_Mastr lmao angela you look like a damn potato bitch, keep talkin",0,1,0
+<MENTION> i saw a great chimpout 2 summers ago a middle aged salvadoran and his 15 yr old son got wasted by 6 beaners at the metlife,hate_speech,['@Woody_AFC'],[],['beaners'],RT @Woody_AFC: I saw a great chimpout 2 summers ago. A middle aged Salvadoran and his 15 Yr old son got wasted by 6 beaners at the metlife …,1,0,0
+every gook in # losangeles should be deported or killed,hate_speech,[],['#LosAngeles'],['gook'],Every gook in #LosAngeles should be deported or killed.,1,0,0
+<MENTION> could get half a band off me <MENTION> fellas <MENTION> dope female followers and state how much you d pay for their pussy,offensive_language,"['@Wuzzername', '@ToeKnee2GX', '@your']",[],['pussy'],@Wuzzername could get half a band off me RT @ToeKnee2GX: Fellas…. @ your dope female followers and state how much you’d pay for their pussy,0,1,0
+sixten just shoved like 8 oreos down his throat,neither,[],[],['oreos'],Sixten just shoved like 8 Oreos down his throat,0,0,1
+bitch fuck yo nigga what s up with that pussy,hate_speech,[],[],"['bitch', 'nigga', 'pussy']","Bitch fuck yo nigga, what's up with that pussy!!?!",1,0,0
+<MENTION> better nig lol but if anything ill flip u the 10 or something im tryna get some more cash,hate_speech,['@kristin12909'],[],['nig'],@kristin12909 better nig. Lol but if anything ill flip u the 10 or something. Im tryna get some more cash,1,0,0
+i hate chunky pasta sauce keep pesky vegetables way from me,neither,[],[],['chunky'],"I hate ""chunky"" pasta sauce. KEEP PESKY VEGETABLES WAY FROM ME",0,0,1
+<MENTION> <MENTION> <MENTION> do birds have a 72 out of wedlock rate is it white fathers that are running away,hate_speech,"['@TheChicagoBaker', '@stopbeingfamous', '@RaniaKhalek']",[],['birds'],@TheChicagoBaker @stopbeingfamous @RaniaKhalek do birds have a 72% out of wedlock rate? is it white fathers that are running away?,1,0,0
+<MENTION> we can t be cool if you gonna be a little bitch all the time,offensive_language,['@Humxnerror'],[],['bitch'],RT @Humxnerror: we can't be cool if you gonna be a little bitch all the time,0,1,0
+stern fixed the image of the league nba players not knocking they bitch out in elevators,offensive_language,[],[],['bitch'],Stern fixed the image of the league.. NBA players not knocking they bitch out in elevators.,0,1,0

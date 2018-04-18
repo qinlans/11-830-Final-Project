@@ -105,7 +105,7 @@ class AttentionClassifier(nn.Module):
 # Preprocesses text for model input
 def process_raw_text(raw_text):
     tokenizer = TweetTokenizer()
-    text = tokenizer.tokenize(raw_text.lower())
+    text = tokenizer.tokenize(raw_text)
     return text
 
 # Read in file containing text for building the training vocabulary
@@ -119,6 +119,17 @@ def read_corpus_file(corpus_filename, text_colname):
             corpus.append(text)
 
     return corpus
+
+# Read in file containing list of slurs to ignore
+def read_slur_file(slur_filename, vocab):
+    slur_set = set() 
+    for line in open(slur_filename, 'r'):
+        slur = line.strip().lower()
+        slur_id = vocab.get_word_id(slur)
+        if not slur_id == vocab.get_word_id('<UNK>'):
+            slur_set.add(slur_id)
+
+    return slur_set
 
 # Read file containing text and label pairs and converts them into Variables
 def process_instances(instances_filename, vocab, labels_to_id, text_colname):
@@ -141,7 +152,7 @@ def process_instances(instances_filename, vocab, labels_to_id, text_colname):
 
 # Update the model for the given instance
 def update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
-    criterion):
+    criterion, slur_set, reverse_gradient, grad_lambda_val=.1):
     encoder_hidden = encoder.init_hidden()
 
     encoder_optimizer.zero_grad()
@@ -149,6 +160,16 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
 
     instance_input, instance_label = instance
     input_length = instance_input.size()[0]
+
+    instance_ids = instance_input.view(-1).data.numpy()
+    instance_slurs = [1 if x in slur_set else 0 for x in instance_ids]
+    slur_mask = Variable(torch.FloatTensor(instance_slurs).view(1, 1, -1))
+    zero_attention = Variable(torch.zeros(1, 1, input_length))
+    grad_lambda = Variable(torch.FloatTensor([grad_lambda_val]))
+    if use_cuda:
+        slur_mask = slur_mask.cuda()
+        zero_attnetion = zero_attention.cuda()
+        grad_lambda = grad_lambda.cuda()
 
     encoder_outputs = Variable(torch.zeros(input_length, encoder.hidden_size*2))
     encoder_outputs = encoder_outputs.cuda() if use_cuda else encoder_outputs
@@ -159,7 +180,14 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
         encoder_outputs[ei] = encoder_output[0][0]
 
     classifier_output, classifier_attention = classifier(encoder_outputs, encoder_hidden)
-    loss = criterion(classifier_output, instance_label)
+    if reverse_gradient:
+        slur_attention = classifier_attention * slur_mask
+        slur_attention_criterion = torch.nn.MSELoss()
+        loss = criterion(classifier_output, instance_label) + grad_lambda * slur_attention_criterion(slur_attention,
+            zero_attention)
+    else:
+        loss = criterion(classifier_output, instance_label)
+
     loss.backward()
 
     encoder_optimizer.step()
@@ -168,12 +196,15 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath,
-    n_epochs=30, print_every=500, learning_rate=.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
+        reverse_gradient=False, criterion=torch.nn.CrossEntropyLoss(), n_epochs=30, print_every=500, learning_rate=.1):
+
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id,
+    out_filepath, weight_filepath, preds_filepath, slur_set, criterion=torch.nn.CrossEntropyLoss(),
+    reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
-    criterion = torch.nn.CrossEntropyLoss()
 
     dev_inputs = [x[0] for x in dev_instances]
     dev_labels = [x[1] for x in dev_instances]
@@ -196,7 +227,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             # Check if instance nonempty
             if len(instance[0].size()) > 0:
                 loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
-                    criterion)
+                    criterion, slur_set, reverse_gradient)
                 print_loss_total += loss
                 print_epoch_loss_total += loss
 
@@ -208,10 +239,10 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
         predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
-        #acc = evaluate_accuracy(dev_labels, predicted_dev_labels)
+        acc = evaluate_accuracy(dev_labels, predicted_dev_labels)
         prec, rec, f1 = evaluate_f1(dev_labels, predicted_dev_labels)
         
-        #print('Epoch %d dev accuracy: %.4f' % (i, score))
+        print('Epoch %d dev accuracy: %.4f' % (i, acc))
         print('Epoch %d dev f1: %.4f' % (i, f1))
         print('Epoch %d dev precision: %.4f' % (i, prec))
         print('Epoch %d dev recall: %.4f' % (i, rec))
@@ -278,7 +309,6 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
         top_value, top_label = classifier_output.data.topk(1)
         predicted_labels.append(Variable(top_label.squeeze(0)))
         attention_weights.append(classifier_attention.data.cpu().tolist())
-
             
     return predicted_labels, attention_weights
 
@@ -344,6 +374,7 @@ def main():
     parser.add_argument('--load-model', nargs='?', dest='load', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
     parser.add_argument('--dataset', nargs='?', dest='dataset_name', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
     parser.add_argument('--epochs', nargs='?', dest='n_epochs', help='Number of epochs', type=int, default=30)
+    parser.add_argument('--reverse-gradient', action='store_true', dest='grad', help='run the gradient reversal version of the model')
     parser.add_argument('--just-eval', dest='just_eval', action='store_true')
     parser.set_defaults(just_eval=False)
     args = parser.parse_args()
@@ -376,6 +407,13 @@ def main():
     weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for attention weights
     preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for predictions
 
+    slur_filename = 'data/hatebase_slurs.txt'
+    slur_set = read_slur_file(slur_filename, vocab)
+
+    training_instances = process_instances(training_filename, vocab, labels_to_id, text_colname)
+    dev_instances = process_instances(dev_filename, vocab, labels_to_id, text_colname)
+    test_instances = process_instances(test_filename, vocab, labels_to_id)
+
     # If loading an existing model
     if args.load:
         print("Loading model...")
@@ -398,7 +436,8 @@ def main():
         classifier = classifier.cuda()
 
     if not args.just_eval:
-        encoder, classifier = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, print_every=500, n_epochs=args.n_epochs)
+        encoder, classifier = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, 
+                 slur_set, print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
 
     # Evaluate on test
     print("Evaluating on test...")
@@ -411,6 +450,5 @@ def main():
     print('test f1: %.4f' % f1)
     print('test precision: %.4f' % prec)
     print('test recall: %.4f' % rec)
-    
 
 if __name__ == '__main__': main()
