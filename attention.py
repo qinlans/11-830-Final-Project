@@ -391,8 +391,8 @@ def main():
     else:
         raise ValueError("No dataset name given")
 
-    text_colname = 'tweet'
-    #text_colname = 'tweet_unk_slur'
+    #text_colname = 'tweet'
+    text_colname = 'tweet_unk_slur'
     #text_colname = 'tweet_no_slur'
 
     fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
