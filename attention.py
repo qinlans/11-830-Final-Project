@@ -33,6 +33,10 @@ class Vocab:
         self.id_to_word = []
         self.word_to_id['<UNK>'] = 0
         self.id_to_word.append('<UNK>')
+        self.word_to_id['<SENT>'] = 1
+        self.id_to_word.append('<SENT>')
+        self.word_to_id['</SENT>'] = 2
+        self.id_to_word.append('</SENT>')
 
     # Given a corpus, build token to id and id to token dictionaries for words
     # that occur more frequently than unk_threshold
@@ -108,6 +112,9 @@ class AttentionClassifier(nn.Module):
 def process_raw_text(raw_text):
     tokenizer = TweetTokenizer()
     text = tokenizer.tokenize(raw_text)
+    text = ['<SENT>'] + text
+    text.append('</SENT>')
+
     return text
 
 # Read in file containing text for building the training vocabulary
