@@ -170,7 +170,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     grad_lambda = Variable(torch.FloatTensor([grad_lambda_val]))
     if use_cuda:
         slur_mask = slur_mask.cuda()
-        zero_attnetion = zero_attention.cuda()
+        zero_attention = zero_attention.cuda()
         grad_lambda = grad_lambda.cuda()
 
     encoder_outputs = Variable(torch.zeros(input_length, encoder.hidden_size*2))
@@ -278,7 +278,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
         print(best_dev_results)
 
-    return best_encoder, best_classifier
+    return best_encoder, best_classifier, starting_ts
 
 
 # Runs the model as a classifier on the given instance_inputs
@@ -467,10 +467,9 @@ def main():
         encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
         classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
 
-        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
-            print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
-
-    viz_filepath = 'output/{}_{}_attn_viz.html'.format(args.dataset_name, ts) # filepath for predictions
+    if use_cuda:
+        encoder = encoder.cuda()
+        classifier = classifier.cuda()
 
     training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
     dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
@@ -479,9 +478,11 @@ def main():
     slur_filename = 'data/hatebase_slurs.txt'
     slur_set = read_slur_file(slur_filename, vocab)
 
-    if use_cuda:
-        encoder = encoder.cuda()
-        classifier = classifier.cuda()
+    if not args.load:
+        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
+            print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
+
+    viz_filepath = 'output/{}_{}_attn_viz.html'.format(args.dataset_name, ts) # filepath for predictions
 
     # Evaluate on test
     print("Evaluating on test...")
