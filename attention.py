@@ -20,6 +20,7 @@ from torch import optim
 
 import pdb
 
+
 use_cuda = torch.cuda.is_available()
 #use_cuda = False # use CPU
 
@@ -500,7 +501,7 @@ def main():
     if not args.load:
         encoder, classifier = train_epochs(training_instances, dev_instances, encoder,
             classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, 
-            print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
+            print_every=2000, reverse_gradient=args.grad, n_epochs=args.n_epochs)
 
 
     # Evaluate on test
