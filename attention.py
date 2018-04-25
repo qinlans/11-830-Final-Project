@@ -232,7 +232,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
         print_epoch_loss_total = 0
         print('Training epoch ' + str(i))
         random.shuffle(training_instances)
-        for j, instance in enumerate(tqdm(training_instances[:100])):
+        for j, instance in enumerate(tqdm(training_instances)):
             # Check if instance nonempty
             if len(instance[0].size()) > 0:
                 loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
@@ -247,7 +247,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
-        predicted_dev_labels, attention_weights = classify(dev_inputs[:100], encoder, classifier, vocab, labels_to_id)
+        predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
         results, prec, rec, f1, acc = evaluate(dev_labels, predicted_dev_labels, i)
         
         print('Epoch %d dev accuracy: %.4f' % (i, acc))
@@ -298,8 +298,8 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
 
 def evaluate(y, y_pred, epoch_num, return_all=True):
     """Compute the performance on the data."""
-    y = [*map(lambda v: v.data.cpu().numpy()[0], y)][:100]
-    y_pred = [*map(lambda v: v.data.cpu().numpy()[0], y_pred)][:100]
+    y = [*map(lambda v: v.data.cpu().numpy()[0], y)]
+    y_pred = [*map(lambda v: v.data.cpu().numpy()[0], y_pred)]
 
     # Set up the output  DataFrame
     index = [id_to_labels[v] for v in list(set(y))] + ['weighted_average']
