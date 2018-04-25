@@ -205,7 +205,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
@@ -222,7 +222,10 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
     best_classifier = None
 
     starting_ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M") # starting timestamp
-    dirpath = out_dirpath + '{}'.format(starting_ts)
+    model_ts_dirpath = model_dirpath + '{}'.format(starting_ts)
+    output_ts_dirpath = output_dirpath + '{}'.format(starting_ts)
+    weight_filepath = os.path.join(output_ts_dirpath, 'attn.pkl')
+    preds_filepath = os.path.join(output_ts_dirpath, 'preds.pkl')
 
     for i in range(n_epochs):
         print_epoch_loss_total = 0
@@ -259,15 +262,17 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             best_dev_score = score
             best_dev_results = 'Best so far f1 %.4f, precision %.4f, recall %.4f. Saving to %s' % (f1, prec, rec, starting_ts)
 
-            if not os.path.exists(dirpath):
-                os.mkdir(dirpath)
+            if not os.path.exists(model_ts_dirpath):
+                os.mkdir(model_ts_dirpath)
+            if not os.path.exists(output_ts_dirpath):
+                os.mkdir(output_ts_dirpath)
 
             # Save encoder
-            torch.save(encoder, os.path.join(dirpath, 'encoder.model'))
+            torch.save(encoder, os.path.join(model_ts_dirpath, 'encoder.model'))
             best_encoder = encoder
 
             # Save classifier
-            torch.save(classifier, os.path.join(dirpath, 'classifier.model'))
+            torch.save(classifier, os.path.join(model_ts_dirpath, 'classifier.model'))
             best_classifier = classifier
 
             # Save vocab
@@ -379,7 +384,11 @@ def color_attn(val, total_max, total_min):
     val = (val-total_min) * scale
     return val
 
-def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, text_colname, eos=False):
+def attention_visualization(output_dirpath, model_ts, dev_filename, dev_labels, text_colname, eos=False):
+
+    viz_filepath = output_dirpath + '{}/attn_viz.html'.format(model_ts)
+    weight_filepath = output_dirpath + '{}/attn.pkl'.format(model_ts)
+    preds_filepath = output_dirpath + '{}/preds.pkl'.format(model_ts)
 
     # Load weights
     with open(weight_filepath, 'rb') as f:
@@ -463,15 +472,16 @@ def main():
     #text_colname = 'tweet_no_slur'
 
     fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
-    out_dirpath =  'models/{}_'.format(args.dataset_name) # path to save the model files to
-    weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for attention weights
-    preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for predictions
+    model_dirpath =  'models/{}_'.format(args.dataset_name) # path to save the model files to
+    output_dirpath =  'output/{}_'.format(args.dataset_name) # path to save the output files to
+    #weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for attention weights
+    #preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for predictions
 
     # If loading an existing model
     if args.load:
         print("Loading model...")
         ts = args.load
-        encoder, classifier, vocab = load_model(out_dirpath, ts)
+        encoder, classifier, vocab = load_model(model_dirpath, ts)
 
     else:
         training_corpus = read_corpus_file(training_filename, args.text_colname)
@@ -493,10 +503,9 @@ def main():
     slur_set = read_slur_file(slur_filename, vocab)
 
     if not args.load:
-        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
+        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, 
             print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
 
-    viz_filepath = 'output/{}_{}_attn_viz.html'.format(args.dataset_name, ts) # filepath for predictions
 
     # Evaluate on test
     print("Evaluating on test...")
@@ -513,6 +522,6 @@ def main():
     # Make attention weight visualization
     dev_labels = [x[1].data[0] for x in dev_instances]
     eos = True
-    attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, args.text_colname, eos=eos)
+    attention_visualization(output_dirpath, ts, dev_filename, dev_labels, args.text_colname, eos=eos)
 
 if __name__ == '__main__': main()
