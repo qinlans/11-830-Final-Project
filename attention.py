@@ -379,7 +379,7 @@ def color_attn(val, total_max, total_min):
     val = (val-total_min) * scale
     return val
 
-def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, text_colname):
+def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, text_colname, eos=False):
 
     # Load weights
     with open(weight_filepath, 'rb') as f:
@@ -395,8 +395,12 @@ def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_f
 
     # Check lengths
     for i, (w,t) in enumerate(zip(wts, text)):
-        if len(w) != len(t):
-            print('{}: {} - {}'.format(i, len(w), len(t)))
+        if eos:
+            if len(w) != len(t) + 2:
+                print('{}: {} - {}'.format(i, len(w), len(t)))
+        else:
+            if len(w) != len(t):
+                print('{}: {} - {}'.format(i, len(w), len(t)))
 
     # Make visualization string
     total_max = max(d for wt in wts for d in wt)
@@ -404,6 +408,9 @@ def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_f
 
     wts_viz = []
     for i, (wt, sent) in enumerate(zip(wts, text)):
+    
+        if eos:
+            sent = ['<sent>'] + sent + ['</sent>']
 
         vals = [color_attn(d, total_max, total_min) for d in wt]
         try:
@@ -505,6 +512,7 @@ def main():
 
     # Make attention weight visualization
     dev_labels = [x[1].data[0] for x in dev_instances]
-    attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, args.text_colname)
+    eos = True
+    attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, args.text_colname, eos=eos)
 
 if __name__ == '__main__': main()
