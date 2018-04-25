@@ -257,7 +257,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
         if score > best_dev_score:
             best_dev_score = score
-            best_dev_results = 'Best so far f1 %.4f, precision %.4f, recall %.4f' % (f1, prec, rec)
+            best_dev_results = 'Best so far f1 %.4f, precision %.4f, recall %.4f. Saving to %s' % (f1, prec, rec, starting_ts)
 
             if not os.path.exists(dirpath):
                 os.mkdir(dirpath)
