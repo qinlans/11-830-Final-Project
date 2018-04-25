@@ -8,6 +8,8 @@ import datetime
 import argparse
 import pickle
 import numpy as np
+import html
+import pandas as pd
 
 from collections import defaultdict
 from nltk.tokenize import TweetTokenizer
@@ -212,7 +214,8 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
     best_encoder = None
     best_classifier = None
 
-    starting_ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S") # starting timestamp
+    starting_ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M") # starting timestamp
+    dirpath = out_dirpath + '{}'.format(starting_ts)
 
     for i in range(n_epochs):
         print_epoch_loss_total = 0
@@ -249,20 +252,19 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             best_dev_score = score
             best_dev_results = 'Best so far f1 %.4f, precision %.4f, recall %.4f' % (f1, prec, rec)
 
-            out_dirpath = out_dirpath + '{}'.format(starting_ts)
-            if not os.path.exists(out_dirpath):
-                os.mkdir(out_dirpath)
+            if not os.path.exists(dirpath):
+                os.mkdir(dirpath)
 
             # Save encoder
-            torch.save(encoder, os.path.join(out_dirpath, 'encoder.model'))
+            torch.save(encoder, os.path.join(dirpath, 'encoder.model'))
             best_encoder = encoder
 
             # Save classifier
-            torch.save(classifier, os.path.join(out_dirpath, 'classifier.model'))
+            torch.save(classifier, os.path.join(dirpath, 'classifier.model'))
             best_classifier = classifier
 
             # Save vocab
-            with open(os.path.join(out_dirpath, 'vocab.pkl'), 'wb') as f:
+            with open(os.path.join(dirpath, 'vocab.pkl'), 'wb') as f:
                 pickle.dump(vocab, f)
 
             # Save attn weights
@@ -349,18 +351,66 @@ def evaluate_f1(true_labels, predicted_labels):
     return prec*100, rec*100, f1
 
 def load_model(model_path, model_ts):
-    dirpath = os.path.join(model_path, model_ts)
+    dirpath = os.path.join(model_path + model_ts)
     clf_path = os.path.join(dirpath, "classifier.model")
     encoder_path = os.path.join(dirpath, "encoder.model")
     vocab_path = os.path.join(dirpath, "vocab.pkl")
 
-    if os.path.exists(clf_path) and os.path.exists(encoder_path) and os.path.exists(vocab_path):
-        encoder = torch.load(encoder_path)
-        classifier = torch.load(clf_path)
-        with open(vocab_path, 'rb') as f:
-            vocab = pickle.load(f)
+    assert os.path.exists(clf_path) and os.path.exists(encoder_path) and os.path.exists(vocab_path)
+
+    encoder = torch.load(encoder_path)
+    classifier = torch.load(clf_path)
+    with open(vocab_path, 'rb') as f:
+        vocab = pickle.load(f)
 
     return encoder, classifier, vocab
+
+def color_attn(val, total_max, total_min):
+    """ Returns 0-1 for highlighting """
+    
+    scale = 1/total_max
+    val = (val-total_min) * scale
+    return val
+
+def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, text_colname):
+
+    # Load weights
+    with open(weight_filepath, 'rb') as f:
+        wts = pickle.load(f)
+        wts = [w[0][0] for w in wts]
+
+    # Load predictions
+    with open(preds_filepath, 'rb') as f:
+        preds = pickle.load(f)
+
+    # Load, tokenize text
+    text = read_corpus_file(dev_filename, text_colname)
+
+    # Check lengths
+    for i, (w,t) in enumerate(zip(wts, text)):
+        if len(w) != len(t):
+            print('{}: {} - {}'.format(i, len(w), len(t)))
+
+    # Make visualization string
+    total_max = max(d for wt in wts for d in wt)
+    total_min = min(d for wt in wts for d in wt)
+
+    wts_viz = []
+    for i, (wt, sent) in enumerate(zip(wts, text)):
+
+        vals = [color_attn(d, total_max, total_min) for d in wt]
+        try:
+            wts_viz.append(''.join(["<span style='background-color: rgba(255,0,0,{})'>{}</span>&nbsp".format(val, html.escape(w)) for val,w in zip(vals, sent)]))
+        except UnicodeEncodeError:
+            continue
+
+    # Match attention weights with predictions
+    out = pd.DataFrame(list(zip(wts_viz, preds, dev_labels)), columns=['attention_weights', 'predicted_label', 'actual_label'])
+    out['attention_weights'].map(lambda x: x.encode('utf8'))
+
+    pd.set_option('display.max_colwidth', -1)
+
+    out.to_html(viz_filepath, escape=False)
 
 def main():
 
@@ -368,10 +418,12 @@ def main():
     parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
     parser.add_argument('--load-model', nargs='?', dest='load', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
     parser.add_argument('--dataset', nargs='?', dest='dataset_name', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
+    parser.add_argument('--text-colname', nargs='?', dest='text_colname', help='name of column with input tweet text', default='')
     parser.add_argument('--epochs', nargs='?', dest='n_epochs', help='Number of epochs', type=int, default=30)
     parser.add_argument('--reverse-gradient', action='store_true', dest='grad', help='run the gradient reversal version of the model')
-    parser.add_argument('--just-eval', dest='just_eval', action='store_true')
-    parser.set_defaults(just_eval=False)
+    #parser.add_argument('--just-eval', dest='just_eval', action='store_true')
+    #parser.set_defaults(just_eval=False)
+    parser.set_defaults(grad=False)
     args = parser.parse_args()
 
     if args.dataset_name == 'davidson':
@@ -392,30 +444,37 @@ def main():
         raise ValueError("No dataset name given")
 
     #text_colname = 'tweet'
-    text_colname = 'tweet_unk_slur'
+    #text_colname = 'text'
+    #text_colname = 'tweet_unk_slur'
     #text_colname = 'tweet_no_slur'
 
     fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
     out_dirpath =  'models/{}_'.format(args.dataset_name) # path to save the model files to
-    weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for attention weights
-    preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, text_colname, fold_name) # filepath for predictions
+    weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for attention weights
+    preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for predictions
 
     # If loading an existing model
     if args.load:
         print("Loading model...")
-        encoder, classifier, vocab = load_model(out_dirpath, args.load)
+        ts = args.load
+        encoder, classifier, vocab = load_model(out_dirpath, ts)
 
     else:
-        training_corpus = read_corpus_file(training_filename, text_colname)
+        training_corpus = read_corpus_file(training_filename, args.text_colname)
         vocab = Vocab()
         vocab.build_vocab(training_corpus)
 
         encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
         classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
 
-    training_instances = process_instances(training_filename, vocab, labels_to_id, text_colname)
-    dev_instances = process_instances(dev_filename, vocab, labels_to_id, text_colname)
-    test_instances = process_instances(test_filename, vocab, labels_to_id, text_colname)
+        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
+            print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
+
+    viz_filepath = 'output/{}_{}_attn_viz.html'.format(args.dataset_name, ts) # filepath for predictions
+
+    training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
+    dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
+    test_instances = process_instances(test_filename, vocab, labels_to_id, args.text_colname)
 
     slur_filename = 'data/hatebase_slurs.txt'
     slur_set = read_slur_file(slur_filename, vocab)
@@ -423,10 +482,6 @@ def main():
     if use_cuda:
         encoder = encoder.cuda()
         classifier = classifier.cuda()
-
-    if not args.just_eval:
-        encoder, classifier = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, 
-                 slur_set, print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
 
     # Evaluate on test
     print("Evaluating on test...")
@@ -439,5 +494,9 @@ def main():
     print('test f1: %.4f' % f1)
     print('test precision: %.4f' % prec)
     print('test recall: %.4f' % rec)
+
+    # Make attention weight visualization
+    dev_labels = [x[1].data[0] for x in dev_instances]
+    attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, args.text_colname)
 
 if __name__ == '__main__': main()
