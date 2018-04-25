@@ -9,8 +9,10 @@ import argparse
 import pickle
 import numpy as np
 import html
+from tqdm import tqdm
 import pandas as pd
 
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from collections import defaultdict
 from nltk.tokenize import TweetTokenizer
 from torch.autograd import Variable
@@ -25,6 +27,7 @@ HIDDEN_DIM = 64
 
 #labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
 labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
+id_to_labels = {v: k for k, v in labels_to_id.items()}
 
 # Class for converting from words to ids and vice-versa
 class Vocab:
@@ -205,7 +208,11 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
+    labels_to_id, model_dirpath, output_dirpath, slur_set,
+    criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30,
+    print_every=500, learning_rate=.1):
+
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
@@ -215,17 +222,17 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
 
     print_loss_total = 0
 
+    best_dev_results = None
     best_dev_score = -np.inf
-    best_dev_results = ''
 
     best_encoder = None
     best_classifier = None
 
     for i in range(n_epochs):
         print_epoch_loss_total = 0
-        print 'Training epoch ' + str(i)
+        print('Training epoch ' + str(i))
         random.shuffle(training_instances)
-        for j, instance in enumerate(training_instances):
+        for j, instance in enumerate(tqdm(training_instances[:100])):
             # Check if instance nonempty
             if len(instance[0].size()) > 0:
                 loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
@@ -236,13 +243,12 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             if j !=0 and j % print_every == 0:
                 print_loss_avg = print_loss_total/print_every
                 print_loss_total = 0
-                print('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
+                tqdm.write('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
-        predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
-        acc = evaluate_accuracy(dev_labels, predicted_dev_labels)
-        prec, rec, f1 = evaluate_f1(dev_labels, predicted_dev_labels)
+        predicted_dev_labels, attention_weights = classify(dev_inputs[:100], encoder, classifier, vocab, labels_to_id)
+        results, prec, rec, f1, acc = evaluate(dev_labels, predicted_dev_labels, i)
         
         print('Epoch %d dev accuracy: %.4f' % (i, acc))
         print('Epoch %d dev f1: %.4f' % (i, f1))
@@ -250,11 +256,12 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
         print('Epoch %d dev recall: %.4f' % (i, rec))
         print('----------------------------------')
 
-        score = f1
-
-        if score > best_dev_score:
-            best_dev_score = score
-            best_dev_results = 'Best so far f1 %.4f, precision %.4f, recall %.4f. Saving to %s' % (f1, prec, rec, model_dirpath)
+        if f1 > best_dev_score or best_dev_score is None:
+            # Update all our best results
+            best_dev_results = results
+            prec, rec, f1, _, _, = tuple(best_dev_results.loc[id_to_labels[1]])
+            best_epoch = best_dev_results.index.name
+            best_dev_score = f1
 
             if not os.path.exists(model_dirpath):
                 os.mkdir(model_dirpath)
@@ -282,10 +289,47 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             with open(os.path.join(output_dirpath, 'preds.pkl'), 'wb') as f:
                 pickle.dump(preds, f)
 
+            # Save the best socres
+            best_dev_results.to_csv(os.path.join(output_dirpath, 'scores.csv'))
+
         print(best_dev_results)
 
     return best_encoder, best_classifier
 
+def evaluate(y, y_pred, epoch_num, return_all=True):
+    """Compute the performance on the data."""
+    y = [*map(lambda v: v.data.cpu().numpy()[0], y)][:100]
+    y_pred = [*map(lambda v: v.data.cpu().numpy()[0], y_pred)][:100]
+
+    # Set up the output  DataFrame
+    index = [id_to_labels[v] for v in list(set(y))] + ['weighted_average']
+    columns = ['precision', 'recall', 'f1_score', 'accuracy', 'support']
+    results = pd.DataFrame(index=index, columns=columns)
+    results.index.name = 'Epoch {}'.format(epoch_num)
+    
+    # Compute everything
+    acc = accuracy_score(y, y_pred)
+    res = precision_recall_fscore_support(y, y_pred)
+    res_weight = precision_recall_fscore_support(y, y_pred, average='weighted')
+    
+    # Compile result numbers
+    prec = np.concatenate([res[0], [res_weight[0]]])
+    rec = np.concatenate([res[1], [res_weight[1]]])
+    f1 =  np.concatenate([res[2], [res_weight[2]]])
+    sup = np.concatenate([res[3], [sum(res[3])]])
+    
+    # Put into results and return
+    results['accuracy']['weighted_average'] = acc
+    results['precision'] = prec
+    results['recall'] = rec
+    results['f1_score'] = f1
+    results['support'] = sup
+    
+    if return_all:
+        prec, rec, f1, _, _, = tuple(results.loc[id_to_labels[1]])
+        return results, prec, rec, f1, acc
+    else:
+        return results
 
 # Runs the model as a classifier on the given instance_inputs
 def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
@@ -293,7 +337,7 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
     predicted_labels = []
     attention_weights = []
 
-    for instance_input in instance_inputs:
+    for instance_input in tqdm(instance_inputs):
         encoder_hidden = encoder.init_hidden()
         if len(instance_input.size()) == 0:
             continue
@@ -314,47 +358,6 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
         attention_weights.append(classifier_attention.data.cpu().tolist())
             
     return predicted_labels, attention_weights
-
-def evaluate_accuracy(true_labels, predicted_labels):
-    correct = 0
-    total = 0
-    for tl, pl in zip(true_labels, predicted_labels):
-        total += 1
-        if tl.data[0] == pl.data[0]:
-            correct += 1
-
-    return float(correct)/total * 100
-
-def evaluate_f1(true_labels, predicted_labels):
-    """ Evaluate f1 on  predicting hate speech """
-
-    total = 0
-    pred_hs = 0
-    actual_hs = 0
-    correct_hs = 0
-
-    for tl, pl in zip(true_labels, predicted_labels):
-        total += 1
-        if tl.data[0] == 1: # is actually hate speech
-            actual_hs += 1
-        if pl.data[0] == 1: # is predicted hate speech
-            pred_hs += 1
-        if tl.data[0] == pl.data[0] == 1:
-            correct_hs += 1
-
-    if pred_hs == 0:
-        prec = 0.0
-    else:
-        prec = float(correct_hs)/pred_hs
-
-    rec = float(correct_hs)/actual_hs
-
-    if prec == rec == 0:
-       f1 = 0.0 
-    else:
-       f1 = 2 * prec * rec / (prec + rec) * 100  
-
-    return prec*100, rec*100, f1
 
 def load_model(model_path, model_ts):
     dirpath = os.path.join(model_path + model_ts)
@@ -495,7 +498,8 @@ def main():
     slur_set = read_slur_file(slur_filename, vocab)
 
     if not args.load:
-        encoder, classifier = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, 
+        encoder, classifier = train_epochs(training_instances, dev_instances, encoder,
+            classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, 
             print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
 
 
