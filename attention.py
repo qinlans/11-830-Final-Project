@@ -25,10 +25,6 @@ use_cuda = torch.cuda.is_available()
 
 HIDDEN_DIM = 64 
 
-labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1} # for zeerak
-#labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1} # for davidson
-id_to_labels = {v: k for k, v in labels_to_id.items()}
-
 # Class for converting from words to ids and vice-versa
 class Vocab:
     def __init__(self):
@@ -216,6 +212,8 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
+    
+    id_to_labels = {v: k for k, v in labels_to_id.items()}
 
     dev_inputs = [x[0] for x in dev_instances]
     dev_labels = [x[1] for x in dev_instances]
@@ -251,7 +249,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
         predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
-        results, prec, rec, f1, acc = evaluate(dev_labels, predicted_dev_labels, i)
+        results, prec, rec, f1, acc = evaluate(dev_labels, predicted_dev_labels, labels_to_id, epoch_num=i)
         
         print('Epoch %d dev accuracy: %.4f' % (i, acc))
         print('Epoch %d dev f1: %.4f' % (i, f1))
@@ -302,8 +300,10 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
 
     return best_encoder, best_classifier
 
-def evaluate(y, y_pred, epoch_num='', return_all=True):
+def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True):
     """Compute the performance on the data."""
+
+    id_to_labels = {v: k for k, v in labels_to_id.items()}
     y = [*map(lambda v: v.data.cpu().numpy()[0], y)]
     y_pred = [*map(lambda v: v.data.cpu().numpy()[0], y_pred)]
 
@@ -442,18 +442,29 @@ def main():
     parser.add_argument('--model-name', nargs='?', dest='model_name', help='name of model to save to', default=None)
     parser.add_argument('--epochs', nargs='?', dest='n_epochs', help='Number of epochs', type=int, default=30)
     parser.add_argument('--reverse-gradient', action='store_true', dest='grad', help='run the gradient reversal version of the model')
+    parser.add_argument('--categorical', action='store_true', dest='categorical', help='do three-way classification')
     parser.set_defaults(grad=False)
+    parser.set_defaults(categorical=False)
     args = parser.parse_args()
 
     if args.dataset_name == 'davidson':
         training_filename = 'data/davidson/train.csv'
         dev_filename = 'data/davidson/dev.csv'
         test_filename = 'data/davidson/test.csv' 
+        
+        if args.categorical:
+            labels_to_id = {'neither': 0, 'offensive_language': 1, 'hate_speech': 2}
+        else:
+            labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
 
     elif args.dataset_name == 'zeerak_naacl':
         training_filename = 'data/zeerak_naacl/train.csv'
         dev_filename = 'data/zeerak_naacl/dev.csv'
         test_filename = 'data/zeerak_naacl/test.csv' 
+        if args.categorical:
+            labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
+        else:
+            labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
 
     else:
         raise ValueError("No dataset name given")
@@ -508,7 +519,7 @@ def main():
     # Check for maximum index
     #max_ind = max([max(el.data.cpu().numpy().flatten()) for el in test_inputs])
     preds, attn_weights = classify(test_inputs, encoder, classifier, vocab, labels_to_id)
-    results, prec, rec, f1, _ = evaluate(test_labels, preds)
+    results, prec, rec, f1, _ = evaluate(test_labels, preds, labels_to_id)
     print('test f1: %.4f' % f1)
     print('test precision: %.4f' % prec)
     print('test recall: %.4f' % rec)
