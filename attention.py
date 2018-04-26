@@ -290,10 +290,13 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
             with open(os.path.join(output_dirpath, 'preds.pkl'), 'wb') as f:
                 pickle.dump(preds, f)
 
-            # Save the best socres
+            # Save the best scores
             best_dev_results.to_csv(os.path.join(output_dirpath, 'dev_scores.csv'))
 
+        print()
+        print("Best dev results so far:")
         print(best_dev_results)
+        print()
 
     return best_encoder, best_classifier
 
