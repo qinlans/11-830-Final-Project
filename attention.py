@@ -26,8 +26,8 @@ use_cuda = torch.cuda.is_available()
 
 HIDDEN_DIM = 64 
 
-#labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
-labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
+labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1} # for zeerak
+#labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1} # for davidson
 id_to_labels = {v: k for k, v in labels_to_id.items()}
 
 # Class for converting from words to ids and vice-versa
@@ -291,18 +291,18 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
                 pickle.dump(preds, f)
 
             # Save the best socres
-            best_dev_results.to_csv(os.path.join(output_dirpath, 'scores.csv'))
+            best_dev_results.to_csv(os.path.join(output_dirpath, 'dev_scores.csv'))
 
         print(best_dev_results)
 
     return best_encoder, best_classifier
 
-def evaluate(y, y_pred, epoch_num, return_all=True):
+def evaluate(y, y_pred, epoch_num='', return_all=True):
     """Compute the performance on the data."""
     y = [*map(lambda v: v.data.cpu().numpy()[0], y)]
     y_pred = [*map(lambda v: v.data.cpu().numpy()[0], y_pred)]
 
-    # Set up the output  DataFrame
+    # Set up the output DataFrame
     index = [id_to_labels[v] for v in list(set(y))] + ['weighted_average']
     columns = ['precision', 'recall', 'f1_score', 'accuracy', 'support']
     results = pd.DataFrame(index=index, columns=columns)
@@ -360,11 +360,10 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
             
     return predicted_labels, attention_weights
 
-def load_model(model_path, model_ts):
-    dirpath = os.path.join(model_path + model_ts)
-    clf_path = os.path.join(dirpath, "classifier.model")
-    encoder_path = os.path.join(dirpath, "encoder.model")
-    vocab_path = os.path.join(dirpath, "vocab.pkl")
+def load_model(model_path):
+    clf_path = os.path.join(model_path, "classifier.model")
+    encoder_path = os.path.join(model_path, "encoder.model")
+    vocab_path = os.path.join(model_path, "vocab.pkl")
 
     assert os.path.exists(clf_path) and os.path.exists(encoder_path) and os.path.exists(vocab_path)
 
@@ -383,7 +382,6 @@ def color_attn(val, total_max, total_min):
     return val
 
 def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colname, eos=False):
-
     viz_filepath = os.path.join(output_dirpath, 'attn_viz.html')
     weight_filepath = os.path.join(output_dirpath, 'attn.pkl')
     preds_filepath = os.path.join(output_dirpath, 'preds.pkl')
@@ -402,12 +400,8 @@ def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colna
 
     # Check lengths
     for i, (w,t) in enumerate(zip(wts, text)):
-        if eos:
-            if len(w) != len(t) + 2:
-                print('{}: {} - {}'.format(i, len(w), len(t)))
-        else:
-            if len(w) != len(t):
-                print('{}: {} - {}'.format(i, len(w), len(t)))
+        if len(w) != len(t):
+            print('Length mismatch for attention visualization instance {}: {} - {}'.format(i, len(w), len(t)))
 
     # Make visualization string
     total_max = max(d for wt in wts for d in wt)
@@ -437,7 +431,7 @@ def main():
 
     # Argparse
     parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
-    parser.add_argument('--load-model', nargs='?', dest='load', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
+    parser.add_argument('--load-model', nargs='?', dest='load', help='Name of model to load (e.g. dataset_YYYY-MM-DDTHH-MM-SS if no model name provided)', default='')
     parser.add_argument('--dataset', nargs='?', dest='dataset_name', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
     parser.add_argument('--text-colname', nargs='?', dest='text_colname', help='name of column with input tweet text', default='')
     parser.add_argument('--model-name', nargs='?', dest='model_name', help='name of model to save to', default=None)
@@ -447,10 +441,6 @@ def main():
     args = parser.parse_args()
 
     if args.dataset_name == 'davidson':
-        #training_filename = 'data/davidson/debug.csv'
-        #dev_filename = 'data/davidson/debug.csv'
-        #test_filename = 'data/davidson/debug.csv'
-
         training_filename = 'data/davidson/train.csv'
         dev_filename = 'data/davidson/dev.csv'
         test_filename = 'data/davidson/test.csv' 
@@ -468,6 +458,9 @@ def main():
     if args.model_name:
         model_dirpath =  'models/{}'.format(args.model_name) # path to save the model files to
         output_dirpath =  'output/{}'.format(args.model_name) # path to save the output files to
+    elif args.load:
+        model_dirpath =  'models/{}'.format(args.load) # path to save the model files to
+        output_dirpath =  'output/{}'.format(args.load) # path to save the output files to
     else:
         ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M") # starting timestamp
         model_dirpath =  'models/{}_{}'.format(args.dataset_name, ts) # path to save the model files to
@@ -476,8 +469,7 @@ def main():
     # If loading an existing model
     if args.load:
         print("Loading model...")
-        ts = args.load
-        encoder, classifier, vocab = load_model(model_dirpath, ts)
+        encoder, classifier, vocab = load_model(model_dirpath)
 
     else:
         training_corpus = read_corpus_file(training_filename, args.text_colname)
@@ -511,10 +503,11 @@ def main():
     # Check for maximum index
     #max_ind = max([max(el.data.cpu().numpy().flatten()) for el in test_inputs])
     preds, attn_weights = classify(test_inputs, encoder, classifier, vocab, labels_to_id)
-    prec, rec, f1 = evaluate_f1(test_labels, preds)
+    results, prec, rec, f1, _ = evaluate(test_labels, preds)
     print('test f1: %.4f' % f1)
     print('test precision: %.4f' % prec)
     print('test recall: %.4f' % rec)
+    results.to_csv(os.path.join(output_dirpath, 'test_scores.csv'))
 
     # Make attention weight visualization
     dev_labels = [x[1].data[0] for x in dev_instances]
