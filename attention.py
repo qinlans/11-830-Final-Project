@@ -386,7 +386,7 @@ def color_attn(val, total_max, total_min):
     val = (val-total_min) * scale
     return val
 
-def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colname, eos=False):
+def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colname):
     viz_filepath = os.path.join(output_dirpath, 'attn_viz.html')
     weight_filepath = os.path.join(output_dirpath, 'attn.pkl')
     preds_filepath = os.path.join(output_dirpath, 'preds.pkl')
@@ -415,14 +415,14 @@ def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colna
     wts_viz = []
     for i, (wt, sent) in enumerate(zip(wts, text)):
     
-        if eos:
-            sent = ['<sent>'] + sent + ['</sent>']
+        #if eos:
+        #    sent = ['<sent>'] + sent + ['</sent>']
 
         vals = [color_attn(d, total_max, total_min) for d in wt]
-        try:
-            wts_viz.append(''.join(["<span style='background-color: rgba(255,0,0,{})'>{}</span>&nbsp".format(val, html.escape(w)) for val,w in zip(vals, sent)]))
-        except UnicodeEncodeError:
-            continue
+        #try:
+        wts_viz.append(''.join(["<span style='background-color: rgba(255,0,0,{})'>{}</span>&nbsp".format(val, html.escape(w)) for val,w in zip(vals, sent)]))
+        #except UnicodeEncodeError:
+        #    continue
 
     # Match attention weights with predictions
     out = pd.DataFrame(list(zip(wts_viz, preds, dev_labels)), columns=['attention_weights', 'predicted_label', 'actual_label'])
@@ -527,7 +527,6 @@ def main():
 
     # Make attention weight visualization
     dev_labels = [x[1].data[0] for x in dev_instances]
-    eos = True
-    attention_visualization(output_dirpath, dev_filename, dev_labels, args.text_colname, eos=eos)
+    attention_visualization(output_dirpath, dev_filename, dev_labels, args.text_colname)
 
 if __name__ == '__main__': main()
