@@ -170,16 +170,6 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     instance_input, instance_label = instance
     input_length = instance_input.size()[0]
 
-    instance_ids = instance_input.view(-1).data.cpu().numpy()
-    instance_slurs = [1 if x in slur_set else 0 for x in instance_ids]
-    slur_mask = Variable(torch.FloatTensor(instance_slurs).view(1, 1, -1))
-    zero_attention = Variable(torch.zeros(1, 1, input_length))
-    grad_lambda = Variable(torch.FloatTensor([grad_lambda_val]))
-    if use_cuda:
-        slur_mask = slur_mask.cuda()
-        zero_attention = zero_attention.cuda()
-        grad_lambda = grad_lambda.cuda()
-
     encoder_outputs = Variable(torch.zeros(input_length, encoder.hidden_size*2))
     encoder_outputs = encoder_outputs.cuda() if use_cuda else encoder_outputs
 
@@ -190,6 +180,16 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
 
     classifier_output, classifier_attention = classifier(encoder_outputs, encoder_hidden)
     if reverse_gradient:
+        instance_ids = instance_input.view(-1).data.cpu().numpy()
+        instance_slurs = [1 if x in slur_set else 0 for x in instance_ids]
+        slur_mask = Variable(torch.FloatTensor(instance_slurs).view(1, 1, -1))
+        zero_attention = Variable(torch.zeros(1, 1, input_length))
+        grad_lambda = Variable(torch.FloatTensor([grad_lambda_val]))
+        if use_cuda:
+            slur_mask = slur_mask.cuda()
+            zero_attention = zero_attention.cuda()
+            grad_lambda = grad_lambda.cuda()
+
         slur_attention = classifier_attention * slur_mask
         slur_attention_criterion = torch.nn.MSELoss()
         loss = criterion(classifier_output, instance_label) + grad_lambda * slur_attention_criterion(slur_attention,
@@ -486,7 +486,8 @@ def main():
     slur_set = read_slur_file(slur_filename, vocab)
 
     if not args.load:
-        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
+        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier,
+            vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
             print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
 
     viz_filepath = 'output/{}_{}_attn_viz.html'.format(args.dataset_name, ts) # filepath for predictions
