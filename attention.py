@@ -1,5 +1,5 @@
 import csv
-import os
+import os, sys
 import random
 import torch
 import torch.nn as nn
@@ -9,8 +9,10 @@ import argparse
 import pickle
 import numpy as np
 import html
+from tqdm import tqdm
 import pandas as pd
 
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from collections import defaultdict
 from nltk.tokenize import TweetTokenizer
 from torch.autograd import Variable
@@ -22,9 +24,6 @@ use_cuda = torch.cuda.is_available()
 #use_cuda = False # use CPU
 
 HIDDEN_DIM = 64 
-
-#labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
-labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
 
 # Class for converting from words to ids and vice-versa
 class Vocab:
@@ -205,30 +204,36 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     return loss
 
 # Trains the model over training_instances for a given number of epochs
-def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30, print_every=500, learning_rate=.1):
+def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
+    labels_to_id, model_dirpath, output_dirpath, slur_set,
+    criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30,
+    print_every=500, learning_rate=.1):
+
     
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
+    
+    id_to_labels = {v: k for k, v in labels_to_id.items()}
 
     dev_inputs = [x[0] for x in dev_instances]
     dev_labels = [x[1] for x in dev_instances]
 
     print_loss_total = 0
 
+    best_dev_results = None
     best_dev_score = -np.inf
-    best_dev_results = ''
 
     best_encoder = None
     best_classifier = None
 
-    starting_ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M") # starting timestamp
-    dirpath = out_dirpath + '{}'.format(starting_ts)
+    if print_every == -1: # Don't print log info
+        print_every = sys.maxsize
 
     for i in range(n_epochs):
         print_epoch_loss_total = 0
-        print 'Training epoch ' + str(i)
+        print('Training epoch ' + str(i))
         random.shuffle(training_instances)
-        for j, instance in enumerate(training_instances):
+        for j, instance in enumerate(tqdm(training_instances)):
             # Check if instance nonempty
             if len(instance[0].size()) > 0:
                 loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
@@ -239,13 +244,12 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
             if j !=0 and j % print_every == 0:
                 print_loss_avg = print_loss_total/print_every
                 print_loss_total = 0
-                print('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
+                tqdm.write('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
 
         print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
         print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
         predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
-        acc = evaluate_accuracy(dev_labels, predicted_dev_labels)
-        prec, rec, f1 = evaluate_f1(dev_labels, predicted_dev_labels)
+        results, prec, rec, f1, acc = evaluate(dev_labels, predicted_dev_labels, labels_to_id, epoch_num=i)
         
         print('Epoch %d dev accuracy: %.4f' % (i, acc))
         print('Epoch %d dev f1: %.4f' % (i, f1))
@@ -253,40 +257,85 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab, 
         print('Epoch %d dev recall: %.4f' % (i, rec))
         print('----------------------------------')
 
-        score = f1
+        if f1 > best_dev_score or best_dev_score is None:
+            # Update all our best results
+            best_dev_results = results
+            prec, rec, f1, _, _, = tuple(best_dev_results.loc[id_to_labels[1]])
+            best_epoch = best_dev_results.index.name
+            best_dev_score = f1
 
-        if score > best_dev_score:
-            best_dev_score = score
-            best_dev_results = 'Best so far f1 %.4f, precision %.4f, recall %.4f' % (f1, prec, rec)
-
-            if not os.path.exists(dirpath):
-                os.mkdir(dirpath)
+            if not os.path.exists(model_dirpath):
+                os.mkdir(model_dirpath)
+            if not os.path.exists(output_dirpath):
+                os.mkdir(output_dirpath)
 
             # Save encoder
-            torch.save(encoder, os.path.join(dirpath, 'encoder.model'))
+            torch.save(encoder, os.path.join(model_dirpath, 'encoder.model'))
             best_encoder = encoder
 
             # Save classifier
-            torch.save(classifier, os.path.join(dirpath, 'classifier.model'))
+            torch.save(classifier, os.path.join(model_dirpath, 'classifier.model'))
             best_classifier = classifier
 
             # Save vocab
-            with open(os.path.join(dirpath, 'vocab.pkl'), 'wb') as f:
+            with open(os.path.join(model_dirpath, 'vocab.pkl'), 'wb') as f:
                 pickle.dump(vocab, f)
 
             # Save attn weights
-            with open(weight_filepath, 'wb') as f:
+            with open(os.path.join(output_dirpath, 'attn.pkl'), 'wb') as f:
                 pickle.dump(attention_weights, f)
 
             # Save predictions
             preds = [p.data.cpu().tolist()[0] for p in predicted_dev_labels]
-            with open(preds_filepath, 'wb') as f:
+            with open(os.path.join(output_dirpath, 'preds.pkl'), 'wb') as f:
                 pickle.dump(preds, f)
 
+            # Save the best scores
+            best_dev_results.to_csv(os.path.join(output_dirpath, 'dev_scores.csv'))
+
+        print()
+        print("Best dev results so far:")
         print(best_dev_results)
+        print()
 
-    return best_encoder, best_classifier, starting_ts
+    return best_encoder, best_classifier
 
+def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True):
+    """Compute the performance on the data."""
+
+    id_to_labels = {v: k for k, v in labels_to_id.items()}
+    y = [*map(lambda v: v.data.cpu().numpy()[0], y)]
+    y_pred = [*map(lambda v: v.data.cpu().numpy()[0], y_pred)]
+
+    # Set up the output DataFrame
+    index = [id_to_labels[v] for v in list(set(y))] + ['weighted_average']
+    columns = ['precision', 'recall', 'f1_score', 'accuracy', 'support']
+    results = pd.DataFrame(index=index, columns=columns)
+    results.index.name = 'Epoch {}'.format(epoch_num)
+    
+    # Compute everything
+    acc = accuracy_score(y, y_pred)
+    res = precision_recall_fscore_support(y, y_pred)
+    res_weight = precision_recall_fscore_support(y, y_pred, average='weighted')
+    
+    # Compile result numbers
+    prec = np.concatenate([res[0], [res_weight[0]]])
+    rec = np.concatenate([res[1], [res_weight[1]]])
+    f1 =  np.concatenate([res[2], [res_weight[2]]])
+    sup = np.concatenate([res[3], [sum(res[3])]])
+    
+    # Put into results and return
+    results['accuracy']['weighted_average'] = acc
+    results['precision'] = prec
+    results['recall'] = rec
+    results['f1_score'] = f1
+    results['support'] = sup
+    
+    if return_all:
+        prec, rec, f1, _, _, = tuple(results.loc[id_to_labels[1]])
+        return results, prec, rec, f1, acc
+    else:
+        return results
 
 # Runs the model as a classifier on the given instance_inputs
 def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
@@ -294,7 +343,7 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
     predicted_labels = []
     attention_weights = []
 
-    for instance_input in instance_inputs:
+    for instance_input in tqdm(instance_inputs):
         encoder_hidden = encoder.init_hidden()
         if len(instance_input.size()) == 0:
             continue
@@ -316,52 +365,10 @@ def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
             
     return predicted_labels, attention_weights
 
-def evaluate_accuracy(true_labels, predicted_labels):
-    correct = 0
-    total = 0
-    for tl, pl in zip(true_labels, predicted_labels):
-        total += 1
-        if tl.data[0] == pl.data[0]:
-            correct += 1
-
-    return float(correct)/total * 100
-
-def evaluate_f1(true_labels, predicted_labels):
-    """ Evaluate f1 on  predicting hate speech """
-
-    total = 0
-    pred_hs = 0
-    actual_hs = 0
-    correct_hs = 0
-
-    for tl, pl in zip(true_labels, predicted_labels):
-        total += 1
-        if tl.data[0] == 1: # is actually hate speech
-            actual_hs += 1
-        if pl.data[0] == 1: # is predicted hate speech
-            pred_hs += 1
-        if tl.data[0] == pl.data[0] == 1:
-            correct_hs += 1
-
-    if pred_hs == 0:
-        prec = 0.0
-    else:
-        prec = float(correct_hs)/pred_hs
-
-    rec = float(correct_hs)/actual_hs
-
-    if prec == rec == 0:
-       f1 = 0.0 
-    else:
-       f1 = 2 * prec * rec / (prec + rec) * 100  
-
-    return prec*100, rec*100, f1
-
-def load_model(model_path, model_ts):
-    dirpath = os.path.join(model_path + model_ts)
-    clf_path = os.path.join(dirpath, "classifier.model")
-    encoder_path = os.path.join(dirpath, "encoder.model")
-    vocab_path = os.path.join(dirpath, "vocab.pkl")
+def load_model(model_path):
+    clf_path = os.path.join(model_path, "classifier.model")
+    encoder_path = os.path.join(model_path, "encoder.model")
+    vocab_path = os.path.join(model_path, "vocab.pkl")
 
     assert os.path.exists(clf_path) and os.path.exists(encoder_path) and os.path.exists(vocab_path)
 
@@ -379,7 +386,10 @@ def color_attn(val, total_max, total_min):
     val = (val-total_min) * scale
     return val
 
-def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, text_colname):
+def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colname):
+    viz_filepath = os.path.join(output_dirpath, 'attn_viz.html')
+    weight_filepath = os.path.join(output_dirpath, 'attn.pkl')
+    preds_filepath = os.path.join(output_dirpath, 'preds.pkl')
 
     # Load weights
     with open(weight_filepath, 'rb') as f:
@@ -396,7 +406,7 @@ def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_f
     # Check lengths
     for i, (w,t) in enumerate(zip(wts, text)):
         if len(w) != len(t):
-            print('{}: {} - {}'.format(i, len(w), len(t)))
+            print('Length mismatch for attention visualization instance {}: {} - {}'.format(i, len(w), len(t)))
 
     # Make visualization string
     total_max = max(d for wt in wts for d in wt)
@@ -404,12 +414,15 @@ def attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_f
 
     wts_viz = []
     for i, (wt, sent) in enumerate(zip(wts, text)):
+    
+        #if eos:
+        #    sent = ['<sent>'] + sent + ['</sent>']
 
         vals = [color_attn(d, total_max, total_min) for d in wt]
-        try:
-            wts_viz.append(''.join(["<span style='background-color: rgba(255,0,0,{})'>{}</span>&nbsp".format(val, html.escape(w)) for val,w in zip(vals, sent)]))
-        except UnicodeEncodeError:
-            continue
+        #try:
+        wts_viz.append(''.join(["<span style='background-color: rgba(255,0,0,{})'>{}</span>&nbsp".format(val, html.escape(w)) for val,w in zip(vals, sent)]))
+        #except UnicodeEncodeError:
+        #    continue
 
     # Match attention weights with predictions
     out = pd.DataFrame(list(zip(wts_viz, preds, dev_labels)), columns=['attention_weights', 'predicted_label', 'actual_label'])
@@ -423,48 +436,56 @@ def main():
 
     # Argparse
     parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
-    parser.add_argument('--load-model', nargs='?', dest='load', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
+    parser.add_argument('--load-model', nargs='?', dest='load', help='Name of model to load (e.g. dataset_YYYY-MM-DDTHH-MM-SS if no model name provided)', default='')
     parser.add_argument('--dataset', nargs='?', dest='dataset_name', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
     parser.add_argument('--text-colname', nargs='?', dest='text_colname', help='name of column with input tweet text', default='')
+    parser.add_argument('--model-name', nargs='?', dest='model_name', help='name of model to save to', default=None)
     parser.add_argument('--epochs', nargs='?', dest='n_epochs', help='Number of epochs', type=int, default=30)
     parser.add_argument('--reverse-gradient', action='store_true', dest='grad', help='run the gradient reversal version of the model')
-    #parser.add_argument('--just-eval', dest='just_eval', action='store_true')
-    #parser.set_defaults(just_eval=False)
+    parser.add_argument('--categorical', action='store_true', dest='categorical', help='do three-way classification')
     parser.set_defaults(grad=False)
+    parser.set_defaults(categorical=False)
     args = parser.parse_args()
 
     if args.dataset_name == 'davidson':
-        #training_filename = 'data/davidson/debug.csv'
-        #dev_filename = 'data/davidson/debug.csv'
-        #test_filename = 'data/davidson/debug.csv'
-
         training_filename = 'data/davidson/train.csv'
         dev_filename = 'data/davidson/dev.csv'
         test_filename = 'data/davidson/test.csv' 
+        
+        if args.categorical:
+            labels_to_id = {'neither': 0, 'offensive_language': 1, 'hate_speech': 2}
+        else:
+            labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
 
     elif args.dataset_name == 'zeerak_naacl':
         training_filename = 'data/zeerak_naacl/train.csv'
         dev_filename = 'data/zeerak_naacl/dev.csv'
         test_filename = 'data/zeerak_naacl/test.csv' 
+        if args.categorical:
+            labels_to_id = {'none': 0, 'racism': 1, 'sexism': 2}
+        else:
+            labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
 
     else:
         raise ValueError("No dataset name given")
 
-    #text_colname = 'tweet'
-    #text_colname = 'text'
-    #text_colname = 'tweet_unk_slur'
-    #text_colname = 'tweet_no_slur'
-
     fold_name = os.path.splitext(os.path.basename(dev_filename))[0] # to examine predictions
-    out_dirpath =  'models/{}_'.format(args.dataset_name) # path to save the model files to
-    weight_filepath = 'output/{}_{}_{}_attn.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for attention weights
-    preds_filepath = 'output/{}_{}_{}_preds.pkl'.format(args.dataset_name, args.text_colname, fold_name) # filepath for predictions
+
+    if args.model_name:
+        model_dirpath =  'models/{}'.format(args.model_name) # path to save the model files to
+        output_dirpath =  'output/{}'.format(args.model_name) # path to save the output files to
+    elif args.load:
+        model_dirpath =  'models/{}'.format(args.load) # path to save the model files to
+        output_dirpath =  'output/{}'.format(args.load) # path to save the output files to
+    else:
+        ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M") # starting timestamp
+        model_dirpath =  'models/{}_{}'.format(args.dataset_name, ts) # path to save the model files to
+        output_dirpath =  'output/{}_{}'.format(args.dataset_name, ts) # path to save the output files to
 
     # If loading an existing model
     if args.load:
         print("Loading model...")
-        ts = args.load
-        encoder, classifier, vocab = load_model(out_dirpath, ts)
+        encoder, classifier, vocab = load_model(model_dirpath)
 
     else:
         training_corpus = read_corpus_file(training_filename, args.text_colname)
@@ -486,11 +507,9 @@ def main():
     slur_set = read_slur_file(slur_filename, vocab)
 
     if not args.load:
-        encoder, classifier, ts = train_epochs(training_instances, dev_instances, encoder, classifier,
-            vocab, labels_to_id, out_dirpath, weight_filepath, preds_filepath, slur_set, 
-            print_every=500, reverse_gradient=args.grad, n_epochs=args.n_epochs)
-
-    viz_filepath = 'output/{}_{}_attn_viz.html'.format(args.dataset_name, ts) # filepath for predictions
+        encoder, classifier = train_epochs(training_instances, dev_instances, encoder,
+            classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, 
+            print_every=-1, reverse_gradient=args.grad, n_epochs=args.n_epochs)
 
     # Evaluate on test
     print("Evaluating on test...")
@@ -499,13 +518,14 @@ def main():
     # Check for maximum index
     #max_ind = max([max(el.data.cpu().numpy().flatten()) for el in test_inputs])
     preds, attn_weights = classify(test_inputs, encoder, classifier, vocab, labels_to_id)
-    prec, rec, f1 = evaluate_f1(test_labels, preds)
+    results, prec, rec, f1, _ = evaluate(test_labels, preds, labels_to_id)
     print('test f1: %.4f' % f1)
     print('test precision: %.4f' % prec)
     print('test recall: %.4f' % rec)
+    results.to_csv(os.path.join(output_dirpath, 'test_scores.csv'))
 
-    # Make attention weight visualization
+    # Make attention weight visualization (from dev weights)
     dev_labels = [x[1].data[0] for x in dev_instances]
-    attention_visualization(weight_filepath, preds_filepath, viz_filepath, dev_filename, dev_labels, args.text_colname)
+    attention_visualization(output_dirpath, dev_filename, dev_labels, args.text_colname)
 
 if __name__ == '__main__': main()
