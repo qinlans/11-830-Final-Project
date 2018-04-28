@@ -525,7 +525,7 @@ def main():
     print('test recall: %.4f' % rec)
     results.to_csv(os.path.join(output_dirpath, 'test_scores.csv'))
 
-    # Make attention weight visualization
+    # Make attention weight visualization (from dev weights)
     dev_labels = [x[1].data[0] for x in dev_instances]
     attention_visualization(output_dirpath, dev_filename, dev_labels, args.text_colname)
 
