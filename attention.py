@@ -201,6 +201,34 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     encoder_optimizer.step()
     classifier_optimizer.step()
 
+    del classifier
+    del encoder
+    del encoder_outputs
+    del classifier_output
+    del encoder_optimizer
+    del classifier_optimizer
+
+    return loss
+
+def train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every):
+    print_epoch_loss_total = 0
+    print_loss_total = 0
+    for j, instance in enumerate(tqdm(training_instances, ncols=100)):
+        # Check if instance nonempty
+        if len(instance[0].size()) > 0:
+            loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
+                criterion, slur_set, reverse_gradient)
+            print_loss_total += loss
+            print_epoch_loss_total += loss
+
+        if j !=0 and j % print_every == 0:
+            print_loss_avg = print_loss_total/print_every
+            print_loss_total = 0
+            tqdm.write('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
+
+    print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
+    print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
+
     return loss
 
 # Trains the model over training_instances for a given number of epochs
@@ -209,7 +237,6 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
     criterion=torch.nn.CrossEntropyLoss(), reverse_gradient=False, n_epochs=30,
     print_every=500, learning_rate=.1):
 
-    
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     classifier_optimizer = optim.SGD(classifier.parameters(), lr=learning_rate)
     
@@ -233,21 +260,29 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
         print_epoch_loss_total = 0
         print('Training epoch ' + str(i))
         random.shuffle(training_instances)
-        for j, instance in enumerate(tqdm(training_instances)):
-            # Check if instance nonempty
-            if len(instance[0].size()) > 0:
-                loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
-                    criterion, slur_set, reverse_gradient)
-                print_loss_total += loss
-                print_epoch_loss_total += loss
 
-            if j !=0 and j % print_every == 0:
-                print_loss_avg = print_loss_total/print_every
-                print_loss_total = 0
-                tqdm.write('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
+        loss = train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every)
+        print_loss_total += loss
 
-        print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
-        print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
+        #for j, instance in enumerate(tqdm(training_instances[:100])):
+        #    # Check if instance nonempty
+        #    if len(instance[0].size()) > 0:
+        #        loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
+        #            criterion, slur_set, reverse_gradient)
+        #        print_loss_total += loss
+        #        print_epoch_loss_total += loss
+
+        #    if j !=0 and j % print_every == 0:
+        #        print_loss_avg = print_loss_total/print_every
+        #        print_loss_total = 0
+        #        tqdm.write('Epoch %d iteration %d loss: %.4f' % (i, j, print_loss_avg))
+            
+        #del loss
+
+        #print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
+        #print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
+        #predicted_dev_labels, attention_weights = classify(dev_inputs[:100], encoder, classifier, vocab, labels_to_id)
+        #results, prec, rec, f1, acc = evaluate(dev_labels[:100], predicted_dev_labels, labels_to_id, epoch_num=i)
         predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
         results, prec, rec, f1, acc = evaluate(dev_labels, predicted_dev_labels, labels_to_id, epoch_num=i)
         
