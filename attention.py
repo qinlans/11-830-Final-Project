@@ -217,7 +217,7 @@ def train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, c
         # Check if instance nonempty
         if len(instance[0].size()) > 0:
             loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
-                criterion, slur_set, reverse_gradient)
+                criterion, slur_set, reverse_gradient, grad_lambda_val=0.5)
             print_loss_total += loss
             print_epoch_loss_total += loss
 
@@ -485,6 +485,12 @@ def main():
         else:
             labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
 
+    elif args.dataset_name == 'davidson-zeerak':
+        training_filename = 'data/davidson/train.csv'
+        dev_filename = 'data/davidson/dev.csv'
+        test_filename = 'data/zeerak_naacl/test.csv' 
+        labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
+
     else:
         raise ValueError("No dataset name given")
 
@@ -514,12 +520,13 @@ def main():
         encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
         classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
 
+        training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
+        dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
+
     if use_cuda:
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
-    dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
     test_instances = process_instances(test_filename, vocab, labels_to_id, args.text_colname)
 
     slur_filename = 'data/hatebase_slurs.txt'
@@ -544,7 +551,7 @@ def main():
     results.to_csv(os.path.join(output_dirpath, 'test_scores.csv'))
 
     # Make attention weight visualization (from dev weights)
-    dev_labels = [x[1].data[0] for x in dev_instances]
-    attention_visualization(output_dirpath, dev_filename, dev_labels, args.text_colname)
+    #dev_labels = [x[1].data[0] for x in dev_instances]
+    #attention_visualization(output_dirpath, dev_filename, dev_labels, args.text_colname)
 
 if __name__ == '__main__': main()
