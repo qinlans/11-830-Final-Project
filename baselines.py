@@ -67,9 +67,12 @@ class DataHandler():
 def evaluate(preds, y, multiclass=False, labels=None):
 
     if multiclass:
-        prec = precision_score(preds, y, average='micro', labels=labels)
-        rec = recall_score(preds, y, average='micro', labels=labels)
-        f1 = f1_score(preds, y, average='micro', labels=labels)
+        #prec = precision_score(preds, y, average='micro', labels=labels)
+        #rec = recall_score(preds, y, average='micro', labels=labels)
+        #f1 = f1_score(preds, y, average='micro', labels=labels)
+        prec = precision_score(preds, y, average='weighted')
+        rec = recall_score(preds, y, average='weighted')
+        f1 = f1_score(preds, y, average='weighted')
 
     else:
         prec = precision_score(preds, y)
@@ -84,15 +87,15 @@ def evaluate(preds, y, multiclass=False, labels=None):
 def main():
 
     # Settings
-    #dataset = 'davidson'
-    dataset = 'zeerak_naacl'
+    dataset = 'davidson'
+    #dataset = 'zeerak_naacl'
 
     #multiclass = False
     multiclass = True
     labels = [1,2] # for multiclass evaluation
 
-    #feats = 'unigrams'
-    feats = 'bigrams'
+    feats = 'unigrams'
+    #feats = 'bigrams'
 
     base_dirpath = '/usr0/home/mamille2/11-830-Final-Project/data/' # for misty
     #base_dirpath = '/usr2/mamille2/11-830-Final-Project/data/' # for erebor
