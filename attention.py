@@ -149,6 +149,8 @@ def process_instances(instances_filename, vocab, labels_to_id, text_colname):
         text = process_raw_text(row[text_colname])
         text_ids = [vocab.get_word_id(word) for word in text]
         text_variable = Variable(torch.LongTensor(text_ids).view(-1, 1))
+        if row['label'] == '':
+            pdb.set_trace()
         label = Variable(torch.LongTensor([labels_to_id[row['label']]]))
         if use_cuda:
             text_variable = text_variable.cuda()
@@ -250,9 +252,6 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
     best_dev_results = None
     best_dev_score = -np.inf
 
-    best_encoder = None
-    best_classifier = None
-
     if print_every == -1: # Don't print log info
         print_every = sys.maxsize
 
@@ -264,7 +263,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
         loss = train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every)
         print_loss_total += loss
 
-        predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, vocab, labels_to_id)
+        predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, labels_to_id)
         results, prec, rec, f1, acc = evaluate(dev_labels, predicted_dev_labels, labels_to_id, epoch_num=i, categorical=categorical)
         
         print('Epoch %d dev accuracy: %.4f' % (i, acc))
@@ -287,11 +286,9 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
 
             # Save encoder
             torch.save(encoder, os.path.join(model_dirpath, 'encoder.model'))
-            best_encoder = encoder
 
             # Save classifier
             torch.save(classifier, os.path.join(model_dirpath, 'classifier.model'))
-            best_classifier = classifier
 
             # Save vocab
             with open(os.path.join(model_dirpath, 'vocab.pkl'), 'wb') as f:
@@ -303,7 +300,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
 
             # Save predictions
             preds = [p.data.cpu().tolist()[0] for p in predicted_dev_labels]
-            with open(os.path.join(output_dirpath, 'preds.pkl'), 'wb') as f:
+            with open(os.path.join(output_dirpath, 'dev_preds.pkl'), 'wb') as f:
                 pickle.dump(preds, f)
 
             # Save the best scores
@@ -313,8 +310,6 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
         print("Best dev results so far:")
         print(best_dev_results)
         print()
-
-    return best_encoder, best_classifier
 
 def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True, categorical=False):
     """Compute the performance on the data."""
@@ -357,12 +352,12 @@ def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True, categorical
         return results
 
 # Runs the model as a classifier on the given instance_inputs
-def classify(instance_inputs, encoder, classifier, vocab, labels_to_id):
+def classify(instance_inputs, encoder, classifier, labels_to_id):
 
     predicted_labels = []
     attention_weights = []
 
-    for instance_input in tqdm(instance_inputs):
+    for instance_input in tqdm(instance_inputs, ncols=100):
         encoder_hidden = encoder.init_hidden()
         if len(instance_input.size()) == 0:
             continue
@@ -462,14 +457,20 @@ def main():
     parser.add_argument('--epochs', nargs='?', dest='n_epochs', help='Number of epochs', type=int, default=30)
     parser.add_argument('--reverse-gradient', action='store_true', dest='grad', help='run the gradient reversal version of the model')
     parser.add_argument('--categorical', action='store_true', dest='categorical', help='do three-way classification')
+    parser.add_argument('--debug', action='store_true', dest='debug', help='load small dataset for debugging', default=False)
     parser.set_defaults(grad=False)
     parser.set_defaults(categorical=False)
     args = parser.parse_args()
 
     if args.dataset_name == 'davidson':
-        training_filename = 'data/davidson/train.csv'
-        dev_filename = 'data/davidson/dev.csv'
-        test_filename = 'data/davidson/test.csv' 
+        if args.debug:
+            training_filename = 'data/davidson/debug.csv'
+            dev_filename = 'data/davidson/debug.csv'
+            test_filename = 'data/davidson/debug.csv' 
+        else:
+            training_filename = 'data/davidson/train.csv'
+            dev_filename = 'data/davidson/dev.csv'
+            test_filename = 'data/davidson/test.csv' 
         
         if args.categorical:
             labels_to_id = {'neither': 0, 'offensive_language': 1, 'hate_speech': 2}
@@ -533,9 +534,10 @@ def main():
     slur_set = read_slur_file(slur_filename, vocab)
 
     if not args.load:
-        encoder, classifier = train_epochs(training_instances, dev_instances, encoder,
+        train_epochs(training_instances, dev_instances, encoder,
             classifier, vocab, labels_to_id, model_dirpath, output_dirpath, slur_set, 
             print_every=-1, reverse_gradient=args.grad, n_epochs=args.n_epochs)
+        encoder, classifier, vocab = load_model(model_dirpath)
 
     # Evaluate on test
     print("Evaluating on test...")
@@ -543,7 +545,7 @@ def main():
     test_labels = [x[1] for x in test_instances]
     # Check for maximum index
     #max_ind = max([max(el.data.cpu().numpy().flatten()) for el in test_inputs])
-    preds, attn_weights = classify(test_inputs, encoder, classifier, vocab, labels_to_id)
+    preds, attn_weights = classify(test_inputs, encoder, classifier, labels_to_id) # ERROR: different preds after training than when loading. test_inputs is the same, so must be something else
     results, prec, rec, f1, _ = evaluate(test_labels, preds, labels_to_id, categorical=args.categorical)
     print('test f1: %.4f' % f1)
     print('test precision: %.4f' % prec)
