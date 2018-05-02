@@ -8,3 +8,4 @@ jupyter_notebooks/testbed.ipynb
 
 output/*
 models/*
+*.swp

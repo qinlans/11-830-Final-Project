@@ -162,7 +162,7 @@ def process_instances(instances_filename, vocab, labels_to_id, text_colname):
 
 # Update the model for the given instance
 def update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
-    criterion, slur_set, reverse_gradient, grad_lambda_val=.1):
+    criterion, slur_set, reverse_gradient, grad_lambda_val=.5):
     encoder_hidden = encoder.init_hidden()
 
     encoder_optimizer.zero_grad()
@@ -295,7 +295,7 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
                 pickle.dump(vocab, f)
 
             # Save attn weights
-            with open(os.path.join(output_dirpath, 'attn.pkl'), 'wb') as f:
+            with open(os.path.join(output_dirpath, 'dev_attn.pkl'), 'wb') as f:
                 pickle.dump(attention_weights, f)
 
             # Save predictions
@@ -327,6 +327,8 @@ def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True, categorical
     # Compute everything
     acc = accuracy_score(y, y_pred)
     res = precision_recall_fscore_support(y, y_pred)
+    #pos_labels = list(range(1,max(set(y))))
+    #res_weight = precision_recall_fscore_support(y, y_pred, labels=pos_labels, average='weighted')
     res_weight = precision_recall_fscore_support(y, y_pred, average='weighted')
     
     # Compile result numbers
@@ -400,10 +402,10 @@ def color_attn(val, total_max, total_min):
     val = (val-total_min) * scale
     return val
 
-def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colname):
-    viz_filepath = os.path.join(output_dirpath, 'attn_viz.html')
-    weight_filepath = os.path.join(output_dirpath, 'attn.pkl')
-    preds_filepath = os.path.join(output_dirpath, 'preds.pkl')
+def attention_visualization(output_dirpath, fold, filename, labels, text_colname):
+    viz_filepath = os.path.join(output_dirpath, '{}_attn_viz.html'.format(fold))
+    weight_filepath = os.path.join(output_dirpath, '{}_attn.pkl'.format(fold))
+    preds_filepath = os.path.join(output_dirpath, '{}_preds.pkl'.format(fold))
 
     # Load weights
     with open(weight_filepath, 'rb') as f:
@@ -415,7 +417,7 @@ def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colna
         preds = pickle.load(f)
 
     # Load, tokenize text
-    text = read_corpus_file(dev_filename, text_colname)
+    text = read_corpus_file(filename, text_colname)
 
     # Check lengths
     for i, (w,t) in enumerate(zip(wts, text)):
@@ -439,7 +441,7 @@ def attention_visualization(output_dirpath, dev_filename, dev_labels, text_colna
         #    continue
 
     # Match attention weights with predictions
-    out = pd.DataFrame(list(zip(wts_viz, preds, dev_labels)), columns=['attention_weights', 'predicted_label', 'actual_label'])
+    out = pd.DataFrame(list(zip(wts_viz, preds, labels)), columns=['attention_weights', 'predicted_label', 'actual_label'])
     out['attention_weights'].map(lambda x: x.encode('utf8'))
 
     pd.set_option('display.max_colwidth', -1)
@@ -453,6 +455,7 @@ def main():
     parser.add_argument('--load-model', nargs='?', dest='load', help='Name of model to load (e.g. dataset_YYYY-MM-DDTHH-MM-SS if no model name provided)', default='')
     parser.add_argument('--dataset', nargs='?', dest='dataset_name', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
     parser.add_argument('--text-colname', nargs='?', dest='text_colname', help='name of column with input tweet text', default='')
+    parser.add_argument('--lambda', nargs='?', dest='grad_lambda', help='gradient reversal lambda', default=0.1)
     parser.add_argument('--model-name', nargs='?', dest='model_name', help='name of model to save to', default=None)
     parser.add_argument('--epochs', nargs='?', dest='n_epochs', help='Number of epochs', type=int, default=30)
     parser.add_argument('--reverse-gradient', action='store_true', dest='grad', help='run the gradient reversal version of the model')
@@ -492,6 +495,18 @@ def main():
         test_filename = 'data/zeerak_naacl/test.csv' 
         labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
 
+    elif args.dataset_name == 'zeerak-davidson':
+        training_filename = 'data/zeerak_naacl/train.csv'
+        dev_filename = 'data/zeerak_naacl/dev.csv'
+        test_filename = 'data/davidson/test.csv' 
+        labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
+
+    elif args.dataset_name == 'sexism-racism':
+        training_filename = 'data/zeerak_naacl/sexism_train.csv'
+        dev_filename = 'data/zeerak_naacl/sexism_dev.csv'
+        test_filename = 'data/davidson/racism_test.csv' 
+        labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
+
     else:
         raise ValueError("No dataset name given")
 
@@ -521,13 +536,12 @@ def main():
         encoder = BidirectionalEncoder(vocab.size(), HIDDEN_DIM)
         classifier = AttentionClassifier(len(labels_to_id), HIDDEN_DIM)
 
-        training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
-        dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
-
     if use_cuda:
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
+    training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
+    dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
     test_instances = process_instances(test_filename, vocab, labels_to_id, args.text_colname)
 
     slur_filename = 'data/hatebase_slurs.txt'
@@ -545,15 +559,27 @@ def main():
     test_labels = [x[1] for x in test_instances]
     # Check for maximum index
     #max_ind = max([max(el.data.cpu().numpy().flatten()) for el in test_inputs])
-    preds, attn_weights = classify(test_inputs, encoder, classifier, labels_to_id) # ERROR: different preds after training than when loading. test_inputs is the same, so must be something else
+    preds, attn_weights = classify(test_inputs, encoder, classifier, labels_to_id)
+
+    # Save attn weights
+    with open(os.path.join(output_dirpath, 'test_attn.pkl'), 'wb') as f:
+        pickle.dump(attn_weights, f)
+
+    # Save predictions
+    pred_vals = [p.data.cpu().tolist()[0] for p in preds]
+    with open(os.path.join(output_dirpath, 'test_preds.pkl'), 'wb') as f:
+        pickle.dump(pred_vals, f)
+
     results, prec, rec, f1, _ = evaluate(test_labels, preds, labels_to_id, categorical=args.categorical)
     print('test f1: %.4f' % f1)
     print('test precision: %.4f' % prec)
     print('test recall: %.4f' % rec)
     results.to_csv(os.path.join(output_dirpath, 'test_scores.csv'))
 
-    # Make attention weight visualization (from dev weights)
-    #dev_labels = [x[1].data[0] for x in dev_instances]
-    #attention_visualization(output_dirpath, dev_filename, dev_labels, args.text_colname)
+    # Make attention weight visualizations from dev and test weights
+    dev_labels = [x[1].data[0] for x in dev_instances]
+    test_labels = [x[1].data[0] for x in test_instances]
+    #attention_visualization(output_dirpath, 'dev', dev_filename, dev_labels, args.text_colname)
+    attention_visualization(output_dirpath, 'test', test_filename, test_labels, args.text_colname)
 
 if __name__ == '__main__': main()
