@@ -29,7 +29,7 @@ class DataHandler():
         if train_prefix and test_prefix:
             self.data['train'] = pd.read_csv(os.path.join(self.data_dirpath['train'], f'{train_prefix}_train.csv'))
             self.data['dev'] = pd.read_csv(os.path.join(self.data_dirpath['dev'], f'{train_prefix}_dev.csv'))
-            self.data['test'] = pd.read_csv(os.path.join(self.data_dirpath['test'], f'{test_prefix}_dev.csv'))
+            self.data['test'] = pd.read_csv(os.path.join(self.data_dirpath['test'], f'{test_prefix}.csv'))
         else:
             for f in self.folds:
                 self.data[f] = pd.read_csv(os.path.join(self.data_dirpath[f], f'{f}.csv'))
@@ -71,7 +71,7 @@ class DataHandler():
         return bow['train'], labels['train'], bow['dev'], labels['dev'], bow['test'], labels['test']
 
 # From attention.py
-def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True, categorical=False):
+def evaluate(y, y_pred, labels_to_id, return_all=True, categorical=False):
     """Compute the performance on the data."""
 
     id_to_labels = {v: k for k, v in labels_to_id.items()}
@@ -80,7 +80,6 @@ def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True, categorical
     index = [id_to_labels[v] for v in list(set(y))] + ['weighted_average']
     columns = ['precision', 'recall', 'f1_score', 'accuracy', 'support']
     results = pd.DataFrame(index=index, columns=columns)
-    results.index.name = 'Epoch {}'.format(epoch_num)
     
     # Compute everything
     acc = accuracy_score(y, y_pred)
@@ -95,7 +94,7 @@ def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True, categorical
     sup = np.concatenate([res[3], [sum(res[3])]])
     
     # Put into results and return
-    results['accuracy']['weighted_average'] = acc
+    results['accuracy']['average'] = acc
     results['precision'] = prec
     results['recall'] = rec
     results['f1_score'] = f1
@@ -103,14 +102,6 @@ def evaluate(y, y_pred, labels_to_id, epoch_num='', return_all=True, categorical
 
     return results
     
-    #if return_all:
-    #    if categorical:
-    #        prec, rec, f1, _, _, = tuple(results.loc['weighted_average'])
-    #    else:
-    #        prec, rec, f1, _, _, = tuple(results.loc[id_to_labels[1]])
-    #    return results, prec, rec, f1, acc
-    #else:
-    #    return results
 
 #def evaluate(preds, y, multiclass=False, labels=None):
 #
@@ -141,18 +132,19 @@ def main():
     test_dataset = 'zeerak_naacl'
 
     #train_prefix = 'racism'
-    #train_prefix = 'sexism'
-    train_prefix = None
-    #test_prefix = 'sexism'
-    #test_prefix = 'racism'
-    test_prefix = None
+    train_prefix = 'sexism'
+    #train_prefix = None
 
-    #multiclass = False
-    multiclass = True
+    #test_prefix = 'sexism'
+    test_prefix = 'racism'
+    #test_prefix = None
+
+    multiclass = False
+    #multiclass = True
     #labels = [1,2] # for multiclass evaluation
 
-    #feats = 'unigrams'
-    feats = 'bigrams'
+    feats = 'unigrams'
+    #feats = 'bigrams'
 
     base_dirpath = '/usr0/home/mamille2/11-830-Final-Project/data/' # for misty
     #base_dirpath = '/usr2/mamille2/11-830-Final-Project/data/' # for erebor
@@ -179,8 +171,6 @@ def main():
             multiclass_transform = {'train': {'none': 0, 'racism': 1, 'sexism': 2},
                                     'dev': {'none': 0, 'racism': 1, 'sexism': 2},
                                     'test': {'none': 0, 'racism': 1, 'sexism': 2}}
-        X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'label', 
-                feats=feats, multiclass_transform = multiclass_transform) 
 
     else:
         multiclass_transform = {}
@@ -198,8 +188,8 @@ def main():
         elif test_dataset=='zeerak_naacl':
             multiclass_transform['test'] = {'none': 0, 'racism': 1, 'sexism': 1}
 
-        X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'label', 
-                    feats=feats, multiclass_transform = multiclass_transform) 
+    X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'label', 
+                    feats=feats, multiclass_transform=multiclass_transform) 
 
     print("done.")
     sys.stdout.flush()

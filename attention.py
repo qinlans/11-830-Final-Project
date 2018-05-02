@@ -544,7 +544,12 @@ def main():
     dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
     test_instances = process_instances(test_filename, vocab, labels_to_id, args.text_colname)
 
-    slur_filename = 'data/hatebase_slurs.txt'
+    if args.dataset_name.endswith('davidson'):
+        slur_filename = 'data/hatebase_slurs.txt'
+    elif args.dataset_name.endswith('zeerak_naacl'):
+        slur_filename = 'data/hatebase+zeerak_exclude_slurs.txt'
+    else:
+        slur_filename = ''
     slur_set = read_slur_file(slur_filename, vocab)
 
     if not args.load:
