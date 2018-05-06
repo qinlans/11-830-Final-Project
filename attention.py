@@ -210,7 +210,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
     del encoder_optimizer
     del classifier_optimizer
 
-    return loss
+    return loss.data.cpu()[0]
 
 def train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every):
     print_epoch_loss_total = 0
@@ -359,7 +359,7 @@ def classify(instance_inputs, encoder, classifier, labels_to_id):
     predicted_labels = []
     attention_weights = []
 
-    for instance_input in tqdm(instance_inputs, ncols=100):
+    for instance_input in tqdm(instance_inputs, ncols=50):
         encoder_hidden = encoder.init_hidden()
         if len(instance_input.size()) == 0:
             continue
@@ -402,10 +402,17 @@ def color_attn(val, total_max, total_min):
     val = (val-total_min) * scale
     return val
 
+def zero_division(n, d):
+    return n/d if d else 0
+
 def attention_visualization(output_dirpath, fold, filename, labels, text_colname):
     viz_filepath = os.path.join(output_dirpath, '{}_attn_viz.html'.format(fold))
     weight_filepath = os.path.join(output_dirpath, '{}_attn.pkl'.format(fold))
+    word_weight_filepath= os.path.join(output_dirpath, '{}_attn_top_weights.csv'.format(fold))
     preds_filepath = os.path.join(output_dirpath, '{}_preds.pkl'.format(fold))
+    types = ['total', 'hate', 'none']
+    word_weights = {t: defaultdict(float) for t in types}
+    word_ctr = {t: defaultdict(int) for t in types}
 
     # Load weights
     with open(weight_filepath, 'rb') as f:
@@ -429,16 +436,21 @@ def attention_visualization(output_dirpath, fold, filename, labels, text_colname
     total_min = min(d for wt in wts for d in wt)
 
     wts_viz = []
-    for i, (wt, sent) in enumerate(zip(wts, text)):
-    
-        #if eos:
-        #    sent = ['<sent>'] + sent + ['</sent>']
+    for i, (wt, sent, pred) in enumerate(zip(wts, text, preds)):
 
+        # Accumulate top word weights
+        for (wd, d) in zip(sent, wt):
+            word_weights['total'][wd] += d
+            word_ctr['total'][wd] += 1 
+            if pred == 1:
+                word_weights['hate'][wd] += d
+                word_ctr['hate'][wd] += 1 
+            else:
+                word_weights['none'][wd] += d
+                word_ctr['none'][wd] += 1 
+        
         vals = [color_attn(d, total_max, total_min) for d in wt]
-        #try:
         wts_viz.append(''.join(["<span style='background-color: rgba(255,0,0,{})'>{}</span>&nbsp".format(val, html.escape(w)) for val,w in zip(vals, sent)]))
-        #except UnicodeEncodeError:
-        #    continue
 
     # Match attention weights with predictions
     out = pd.DataFrame(list(zip(wts_viz, preds, labels)), columns=['attention_weights', 'predicted_label', 'actual_label'])
@@ -447,6 +459,23 @@ def attention_visualization(output_dirpath, fold, filename, labels, text_colname
     pd.set_option('display.max_colwidth', -1)
 
     out.to_html(viz_filepath, escape=False)
+
+    # Save top word weights
+    outlines = [[wd, 
+                zero_division(word_weights['total'][wd], word_ctr['total'][wd]), 
+                word_ctr['total'][wd], 
+                word_weights['total'][wd],
+                zero_division(word_weights['hate'][wd], word_ctr['hate'][wd]), 
+                word_ctr['hate'][wd], 
+                word_weights['hate'][wd],
+                zero_division(word_weights['none'][wd], word_ctr['none'][wd]), 
+                word_ctr['none'][wd], 
+                word_weights['none'][wd],
+                ] for wd in word_weights['total']]
+    top_wd_wts = pd.DataFrame(outlines, 
+                        columns=['word', 'average_weight', 'count', 'total_weight', 'average_hate_weight', 'hate_count', 'hate_weight', 'average_none_weight', 'none_count', 'average_none_weight'])
+    top_wd_wts.sort_values('average_hate_weight', inplace=True, ascending=False)
+    top_wd_wts.to_csv(word_weight_filepath, index=False)
 
 def main():
 
@@ -461,6 +490,7 @@ def main():
     parser.add_argument('--reverse-gradient', action='store_true', dest='grad', help='run the gradient reversal version of the model')
     parser.add_argument('--categorical', action='store_true', dest='categorical', help='do three-way classification')
     parser.add_argument('--debug', action='store_true', dest='debug', help='load small dataset for debugging', default=False)
+    parser.add_argument('--cross-domain', action='store_true', dest='cross', help='cross domain running', default=False)
     parser.set_defaults(grad=False)
     parser.set_defaults(categorical=False)
     args = parser.parse_args()
@@ -501,11 +531,17 @@ def main():
         test_filename = 'data/davidson/test.csv' 
         labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
 
-    elif args.dataset_name == 'sexism-racism':
+    elif args.dataset_name == 'sexism-racism_zeerak_naacl':
         training_filename = 'data/zeerak_naacl/sexism_train.csv'
         dev_filename = 'data/zeerak_naacl/sexism_dev.csv'
-        test_filename = 'data/davidson/racism_test.csv' 
-        labels_to_id = {'neither': 0, 'offensive_language': 0, 'hate_speech': 1}
+        test_filename = 'data/zeerak_naacl/racism.csv' 
+        labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
+
+    elif args.dataset_name == 'racism-sexism_zeerak_naacl':
+        training_filename = 'data/zeerak_naacl/racism_train.csv'
+        dev_filename = 'data/zeerak_naacl/racism_dev.csv'
+        test_filename = 'data/zeerak_naacl/sexism.csv' 
+        labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
 
     else:
         raise ValueError("No dataset name given")
@@ -514,10 +550,21 @@ def main():
 
     if args.model_name:
         model_dirpath =  'models/{}'.format(args.model_name) # path to save the model files to
-        output_dirpath =  'output/{}'.format(args.model_name) # path to save the output files to
+        if args.cross:
+            output_dirpath =  'output/{}_{}'.format(args.dataset_name, args.model_name) # path to save the output files to
+            if not os.path.exists(output_dirpath):
+                os.mkdir(output_dirpath)
+        else:
+            output_dirpath =  'output/{}'.format(args.model_name) # path to save the output files to
     elif args.load:
         model_dirpath =  'models/{}'.format(args.load) # path to save the model files to
-        output_dirpath =  'output/{}'.format(args.load) # path to save the output files to
+        if args.cross:
+            output_dirpath =  'output/{}_{}'.format(args.dataset_name, args.load) # path to save the output files to
+            if not os.path.exists(output_dirpath):
+                os.mkdir(output_dirpath)
+        else:
+            output_dirpath =  'output/{}'.format(args.load) # path to save the output files to
+
     else:
         ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M") # starting timestamp
         model_dirpath =  'models/{}_{}'.format(args.dataset_name, ts) # path to save the model files to
@@ -540,8 +587,8 @@ def main():
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
-    dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
+    #training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
+    #dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
     test_instances = process_instances(test_filename, vocab, labels_to_id, args.text_colname)
 
     if args.dataset_name.endswith('davidson'):
@@ -582,7 +629,7 @@ def main():
     results.to_csv(os.path.join(output_dirpath, 'test_scores.csv'))
 
     # Make attention weight visualizations from dev and test weights
-    dev_labels = [x[1].data[0] for x in dev_instances]
+    #dev_labels = [x[1].data[0] for x in dev_instances]
     test_labels = [x[1].data[0] for x in test_instances]
     #attention_visualization(output_dirpath, 'dev', dev_filename, dev_labels, args.text_colname)
     attention_visualization(output_dirpath, 'test', test_filename, test_labels, args.text_colname)
