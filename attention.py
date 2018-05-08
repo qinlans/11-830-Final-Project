@@ -215,7 +215,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
 def train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every):
     print_epoch_loss_total = 0
     print_loss_total = 0
-    for j, instance in enumerate(tqdm(training_instances, ncols=100)):
+    for j, instance in enumerate(tqdm(training_instances, ncols=50)):
         # Check if instance nonempty
         if len(instance[0].size()) > 0:
             loss = update_model(instance, encoder, encoder_optimizer, classifier, classifier_optimizer,
@@ -593,7 +593,7 @@ def main():
 
     if args.dataset_name.endswith('davidson'):
         slur_filename = 'data/hatebase_slurs.txt'
-    elif args.dataset_name.endswith('zeerak_naacl'):
+    elif args.dataset_name.endswith('zeerak_naacl') or args.dataset_name.endswith('zeerak'):
         slur_filename = 'data/hatebase+zeerak_exclude_slurs.txt'
     else:
         slur_filename = ''
