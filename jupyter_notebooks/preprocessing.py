@@ -23,11 +23,14 @@ URL = '<URL>'
 def clean_tweets(df):
     """Clean the tweets in a dataframe."""
     # First we convert everything from html encoding to unicode
+    print('html removal')
     df['tweet'] = [*map(html.unescape, df['tweet'])]
     # Then we save a version of the original tweet before processing
+    print('url removal')
     df['original_tweet'] = df['tweet']
     df['tweet'] = [*map(replace_url, df['tweet'])]
     # Remvoe certain characters (as per )
+    print('cleaning and extracting mentions/hashtags')
     df['tweet'] = [*map(strip_text, df['tweet'])]
     df['tweet'], df['mentions'], df['hashtags'] = \
         replace_all_mentions(df['tweet'])
@@ -49,7 +52,7 @@ def replace_url(text, replace_with=URL):
     return url_pattern.sub(replace_with, text)
 
 
-def replace_mentions(tweet, remove_stopwords=True):
+def replace_mentions(tweet, remove_stopwords=False):
     """Replace all mentions in a tweet with <MENTION>.
     
     Returns: the new tweet, and a list of mentions.
