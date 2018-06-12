@@ -29,7 +29,7 @@ class DataHandler():
         if train_prefix and test_prefix:
             self.data['train'] = pd.read_csv(os.path.join(self.data_dirpath['train'], f'{train_prefix}_train.csv'))
             self.data['dev'] = pd.read_csv(os.path.join(self.data_dirpath['dev'], f'{train_prefix}_dev.csv'))
-            self.data['test'] = pd.read_csv(os.path.join(self.data_dirpath['test'], f'{test_prefix}.csv'))
+            self.data['test'] = pd.read_csv(os.path.join(self.data_dirpath['test'], f'{test_prefix}_test.csv'))
         else:
             for f in self.folds:
                 self.data[f] = pd.read_csv(os.path.join(self.data_dirpath[f], f'{f}.csv'))
@@ -75,6 +75,7 @@ def evaluate(y, y_pred, labels_to_id, return_all=True, categorical=False):
     """Compute the performance on the data."""
 
     id_to_labels = {v: k for k, v in labels_to_id.items()}
+    # will put 'sexism' for racism/sexism
 
     # Set up the output DataFrame
     index = [id_to_labels[v] for v in list(set(y))] + ['weighted_average']
@@ -131,12 +132,12 @@ def main():
     #test_dataset = 'davidson'
     test_dataset = 'zeerak_naacl'
 
-    #train_prefix = 'racism'
-    train_prefix = 'sexism'
+    train_prefix = 'racism'
+    #train_prefix = 'sexism'
     #train_prefix = None
 
-    #test_prefix = 'sexism'
     test_prefix = 'racism'
+    #test_prefix = 'sexism'
     #test_prefix = None
 
     multiclass = False
@@ -208,8 +209,7 @@ def main():
     sys.stdout.flush()
     preds = clf.predict(X_test)
 
-    #prec, rec, f1, acc = evaluate(preds, y_test , categorical=multiclass)
-    results = evaluate(preds, y_test, labels_to_id=multiclass_transform['test'], categorical=multiclass)
+    results = evaluate(y_test, preds, labels_to_id=multiclass_transform['test'], categorical=multiclass)
     print(results)
 
     print("done.")

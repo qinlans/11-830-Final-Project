@@ -482,7 +482,7 @@ def main():
     # Argparse
     parser = argparse.ArgumentParser(description='Train model to identify hate speech.')
     parser.add_argument('--load-model', nargs='?', dest='load', help='Name of model to load (e.g. dataset_YYYY-MM-DDTHH-MM-SS if no model name provided)', default='')
-    parser.add_argument('--dataset', nargs='?', dest='dataset_name', help='timestamp of model to load in format YYYY-MM-DDTHH-MM-SS', default='')
+    parser.add_argument('--dataset', nargs='?', dest='dataset_name', help='Name of dataset to load', default='')
     parser.add_argument('--text-colname', nargs='?', dest='text_colname', help='name of column with input tweet text', default='')
     parser.add_argument('--lambda', nargs='?', dest='grad_lambda', help='gradient reversal lambda', default=0.1)
     parser.add_argument('--model-name', nargs='?', dest='model_name', help='name of model to save to', default=None)
@@ -543,6 +543,18 @@ def main():
         test_filename = 'data/zeerak_naacl/sexism.csv' 
         labels_to_id = {'none': 0, 'racism': 1, 'sexism': 1}
 
+    elif args.dataset_name == 'sexism_zeerak_naacl':
+        training_filename = 'data/zeerak_naacl/sexism_train.csv'
+        dev_filename = 'data/zeerak_naacl/sexism_dev.csv'
+        test_filename = 'data/zeerak_naacl/sexism_test.csv' 
+        labels_to_id = {'none': 0, 'racism': 0, 'sexism': 1}
+
+    elif args.dataset_name == 'racism_zeerak_naacl':
+        training_filename = 'data/zeerak_naacl/racism_train.csv'
+        dev_filename = 'data/zeerak_naacl/racism_dev.csv'
+        test_filename = 'data/zeerak_naacl/racism_test.csv' 
+        labels_to_id = {'none': 0, 'racism': 1, 'sexism': 0}
+
     else:
         raise ValueError("No dataset name given")
 
@@ -587,8 +599,8 @@ def main():
         encoder = encoder.cuda()
         classifier = classifier.cuda()
 
-    #training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
-    #dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
+    training_instances = process_instances(training_filename, vocab, labels_to_id, args.text_colname)
+    dev_instances = process_instances(dev_filename, vocab, labels_to_id, args.text_colname)
     test_instances = process_instances(test_filename, vocab, labels_to_id, args.text_colname)
 
     if args.dataset_name.endswith('davidson'):
