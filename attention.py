@@ -212,7 +212,7 @@ def update_model(instance, encoder, encoder_optimizer, classifier, classifier_op
 
     return loss.data.cpu()[0]
 
-def train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every):
+def train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every, output_dirpath):
     print_epoch_loss_total = 0
     print_loss_total = 0
     for j, instance in enumerate(tqdm(training_instances, ncols=50)):
@@ -230,6 +230,10 @@ def train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, c
 
     print_epoch_loss_avg = print_epoch_loss_total/len(training_instances)
     print('Epoch %d avg loss: %.4f' % (i, print_epoch_loss_avg))
+    # Save avg losses to a file
+    loss_fpath = os.path.join(output_dirpath, 'loss.txt')
+    with open(loss_fpath, 'a') as f:
+        f.write('{}\t{:.4f}\n'.format(i, print_epoch_loss_avg))
 
     return loss
 
@@ -260,7 +264,12 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
         print('Training epoch ' + str(i))
         random.shuffle(training_instances)
 
-        loss = train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every)
+        if not os.path.exists(model_dirpath):
+            os.mkdir(model_dirpath)
+        if not os.path.exists(output_dirpath):
+            os.mkdir(output_dirpath)
+
+        loss = train_epoch(i, training_instances, encoder, encoder_optimizer, classifier, classifier_optimizer, criterion, slur_set, reverse_gradient, print_every, output_dirpath)
         print_loss_total += loss
 
         predicted_dev_labels, attention_weights = classify(dev_inputs, encoder, classifier, labels_to_id)
@@ -278,11 +287,6 @@ def train_epochs(training_instances, dev_instances, encoder, classifier, vocab,
             prec, rec, f1, _, _, = tuple(best_dev_results.loc[id_to_labels[1]])
             best_epoch = best_dev_results.index.name
             best_dev_score = f1
-
-            if not os.path.exists(model_dirpath):
-                os.mkdir(model_dirpath)
-            if not os.path.exists(output_dirpath):
-                os.mkdir(output_dirpath)
 
             # Save encoder
             torch.save(encoder, os.path.join(model_dirpath, 'encoder.model'))

@@ -10,6 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, accuracy_score, recall_score, precision_score, precision_recall_fscore_support
 
 from nltk.tokenize import TweetTokenizer
+import pickle
 
 
 class DataHandler():
@@ -68,7 +69,19 @@ class DataHandler():
             else:
                 labels[f] = self.data[f][self.outcome_colname].tolist()
 
-        return bow['train'], labels['train'], bow['dev'], labels['dev'], bow['test'], labels['test']
+        return bow['train'], labels['train'], bow['dev'], labels['dev'], bow['test'], labels['test'], vec
+
+def informative_features(vectorizer, clf, outpath, n=20):
+    """Prints features with the highest coefficient values"""
+    feature_names = vectorizer.get_feature_names()
+    top = np.argsort(clf.coef_).ravel()[-1*n:]
+
+    # Save top n
+    with open(outpath, 'w') as f:
+        for wd in reversed([feature_names[j] for j in top]):
+            f.write(wd + '\n')
+ 
+    #print("\n".join(reversed([feature_names[j] for j in top])))
 
 # From attention.py
 def evaluate(y, y_pred, labels_to_id, return_all=True, categorical=False):
@@ -104,26 +117,6 @@ def evaluate(y, y_pred, labels_to_id, return_all=True, categorical=False):
     return results
     
 
-#def evaluate(preds, y, multiclass=False, labels=None):
-#
-#    if multiclass:
-#        #prec = precision_score(preds, y, average='micro', labels=labels)
-#        #rec = recall_score(preds, y, average='micro', labels=labels)
-#        #f1 = f1_score(preds, y, average='micro', labels=labels)
-#        prec = precision_score(preds, y, average='weighted')
-#        rec = recall_score(preds, y, average='weighted')
-#        f1 = f1_score(preds, y, average='weighted')
-#
-#    else:
-#        prec = precision_score(preds, y)
-#        rec = recall_score(preds, y)
-#        f1 = f1_score(preds, y)
-#
-#    acc = accuracy_score(preds, y)
-#
-#    return prec, rec, f1, acc
-
-
 def main():
 
     # Settings
@@ -132,12 +125,12 @@ def main():
     #test_dataset = 'davidson'
     test_dataset = 'zeerak_naacl'
 
-    train_prefix = 'racism'
-    #train_prefix = 'sexism'
+    #train_prefix = 'racism'
+    train_prefix = 'sexism'
     #train_prefix = None
 
-    test_prefix = 'racism'
-    #test_prefix = 'sexism'
+    #test_prefix = 'racism'
+    test_prefix = 'sexism'
     #test_prefix = None
 
     multiclass = False
@@ -147,10 +140,14 @@ def main():
     feats = 'unigrams'
     #feats = 'bigrams'
 
-    base_dirpath = '/usr0/home/mamille2/11-830-Final-Project/data/' # for misty
+    base_dirpath = '/usr0/home/mamille2/11-830-Final-Project' # for misty
+    data_dirpath = os.path.join(base_dirpath, 'data')
+    output_dirpath = os.path.join(base_dirpath, 'output')
     #base_dirpath = '/usr2/mamille2/11-830-Final-Project/data/' # for erebor
-    train_data_dirpath = os.path.join(base_dirpath, train_dataset)
-    test_data_dirpath = os.path.join(base_dirpath, test_dataset)
+    train_data_dirpath = os.path.join(data_dirpath, train_dataset)
+    test_data_dirpath = os.path.join(data_dirpath, test_dataset)
+    feats_outpath = os.path.join(output_dirpath, f'logreg_top_features_{train_prefix}_{test_prefix}.txt')
+    preds_outpath = os.path.join(output_dirpath, f'logreg_preds_{train_prefix}_{test_prefix}.pkl')
 
     dh = DataHandler()
 
@@ -189,7 +186,7 @@ def main():
         elif test_dataset=='zeerak_naacl':
             multiclass_transform['test'] = {'none': 0, 'racism': 1, 'sexism': 1}
 
-    X_train, y_train, X_dev, y_dev, X_test, y_test = dh.process_data('tweet', 'label', 
+    X_train, y_train, X_dev, y_dev, X_test, y_test, vec = dh.process_data('tweet', 'label', 
                     feats=feats, multiclass_transform=multiclass_transform) 
 
     print("done.")
@@ -208,12 +205,20 @@ def main():
     print("Evaluating classifier...")
     sys.stdout.flush()
     preds = clf.predict(X_test)
+    
+    # Save out preds
+    with open(preds_outpath, 'wb') as f:
+        pickle.dump(preds, f)
 
     results = evaluate(y_test, preds, labels_to_id=multiclass_transform['test'], categorical=multiclass)
     print(results)
 
     print("done.")
     sys.stdout.flush()
+
+    print(f"Most informative features saved to {feats_outpath}.")
+    sys.stdout.flush()
+    informative_features(vec, clf, feats_outpath, n=100)
 
     print()
     #print(f'Precision: {prec}')
