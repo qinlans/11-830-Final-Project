@@ -20,6 +20,16 @@ from torch import optim
 
 import pdb
 
+
+"""
+This is the main file to train and run the prediction model for the project.
+The model is a bidirectional encoder with an attention layer, which are both
+implemented as PyTorch modules.
+
+Entrance point: the 'main' function.
+"""
+
+
 use_cuda = torch.cuda.is_available()
 #use_cuda = False # use CPU
 
@@ -480,6 +490,7 @@ def attention_visualization(output_dirpath, fold, filename, labels, text_colname
                         columns=['word', 'average_weight', 'count', 'total_weight', 'average_hate_weight', 'hate_count', 'hate_weight', 'average_none_weight', 'none_count', 'average_none_weight'])
     top_wd_wts.sort_values('average_hate_weight', inplace=True, ascending=False)
     top_wd_wts.to_csv(word_weight_filepath, index=False)
+
 
 def main():
 
